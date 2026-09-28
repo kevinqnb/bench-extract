@@ -1,19 +1,22 @@
 """Builds the profiling table every RouteExtractor/CascadeExtractor/
 ScheduleExtractor.fit() consumes: one row per (document_id, field,
-model_key), scored against ground truth with the field's VRDU match
-function (datasets.matching).
+model_key), scored against ground truth via the active dataset's own
+`score_field` (part of the DatasetRunContext every experiments/
+dataset-configs/<key>.py module returns -- see bench_extract.datasets.base).
+This module never imports a specific dataset's matching logic -- what
+"correct" means is entirely that dataset's business.
 
 This is deliberately the single evaluation code path -- experiments/
 run_benchmark.py's accuracy numbers and every method's *fit* both read
 `correct` from here, so a router's training signal and its reported
 benchmark accuracy can never silently disagree.
 
-Simplification vs. the official VRDU evaluator: this scores one predicted
-value against the flat list of a field's ground-truth text occurrences,
-regardless of `entity_appearance_pattern` (`unrepeated` vs. `line_item`) --
-enough to drive routing/cascade/scheduling decisions, but not the official
-line-item-aware micro/macro F1. Use the official `vrdu.evaluate` for a
-paper-comparable number.
+Simplification vs. the official VRDU evaluator: for the `vrdu` dataset, this
+scores one predicted value against the flat list of a field's ground-truth
+text occurrences, regardless of `entity_appearance_pattern` (`unrepeated` vs.
+`line_item`) -- enough to drive routing/cascade/scheduling decisions, but not
+the official line-item-aware micro/macro F1. Use the official `vrdu.evaluate`
+for a paper-comparable number.
 
 Timing caveat: experiments/run_benchmark.py's `_profile_models` makes ONE
 `extract(text, fields)` call per (document, model) covering every field at
@@ -30,10 +33,9 @@ means profiling one call per field instead.
 
 from __future__ import annotations
 
-import pandas as pd
+from typing import Any, Callable
 
-from bench_extract.datasets import matching
-from bench_extract.datasets.vrdu import CorpusSchema, VRDUDocument
+import pandas as pd
 
 PROFILING_TABLE_COLUMNS = [
     "document_id",
@@ -49,23 +51,17 @@ PROFILING_TABLE_COLUMNS = [
 ]
 
 
-def score_prediction(predicted_values: list[str], ground_truth_values: list[str], match_func_name: str) -> bool:
-    """True if any one of `predicted_values` matches any one of
-    `ground_truth_values` under the named match function."""
-    if not predicted_values or not ground_truth_values:
-        return False
-    match_cls = matching.MATCH_FUNCS.get(match_func_name, matching.DefaultMatch)
-    return any(match_cls.match(pred, ground_truth_values) for pred in predicted_values)
-
-
 def build_profiling_table(
     run_predictions: dict[str, dict[str, dict[str, list[str]]]],
-    documents: dict[str, VRDUDocument],
-    schema: CorpusSchema,
+    documents: dict[str, Any],
+    fields: list[str],
+    score_field: Callable[[list[str], list[str], str], bool],
     timing: dict[str, dict[str, dict]],
 ) -> pd.DataFrame:
     """
     run_predictions: model_key -> document_id -> field -> predicted value(s)
+    documents:       document_id -> Document (must expose `.fields: dict[str, list[str]]`)
+    score_field:     DatasetRunContext.score_field -- (predicted, ground_truth, field) -> correct
     timing:          model_key -> document_id -> {'wall_seconds', 'prompt_tokens',
                       'completion_tokens', 'error'} (see utils.timing.UsageRecord)
 
@@ -77,7 +73,7 @@ def build_profiling_table(
         for document_id, field_values in by_doc.items():
             doc = documents[document_id]
             doc_timing = timing.get(model_key, {}).get(document_id, {})
-            for field, match_func_name in schema.entity_name_to_match_func.items():
+            for field in fields:
                 predicted = field_values.get(field, [])
                 ground_truth = doc.fields.get(field, [])
                 rows.append(
@@ -87,7 +83,7 @@ def build_profiling_table(
                         "model_key": model_key,
                         "prediction": predicted,
                         "ground_truth": ground_truth,
-                        "correct": score_prediction(predicted, ground_truth, match_func_name),
+                        "correct": score_field(predicted, ground_truth, field),
                         "wall_seconds": doc_timing.get("wall_seconds"),
                         "prompt_tokens": doc_timing.get("prompt_tokens"),
                         "completion_tokens": doc_timing.get("completion_tokens"),

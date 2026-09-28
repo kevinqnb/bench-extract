@@ -17,8 +17,19 @@ def test_load_corpus_schema():
     assert schema.dataset_name == "DeepForm"
     assert schema.entity_name_to_match_func == {
         "advertiser": "GeneralStringMatch",
-        "gross_amount": "PriceMatch",
+        "agency": "GeneralStringMatch",
+        "contract_num": "NumericalStringMatch",
         "flight_from": "DateMatch",
+        "flight_to": "DateMatch",
+        "gross_amount": "PriceMatch",
+        "product": "GeneralStringMatch",
+        "tv_address": "AddressMatch",
+        "property": "GeneralStringMatch",
+        "channel": "GeneralStringMatch",
+        "program_desc": "GeneralStringMatch",
+        "program_start_date": "DateMatch",
+        "program_end_date": "DateMatch",
+        "sub_amount": "PriceMatch",
     }
 
 

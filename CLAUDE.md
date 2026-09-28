@@ -34,15 +34,39 @@ Everything under `data/` is gitignored except `data/README.md` and
 `data/download_vrdu.py`. Run `uv run data/download_vrdu.py` once to populate it. See
 `data/README.md` for the reshaped layout.
 
+## Choosing a dataset
+
+An experiment config's `params.dataset` names a key in `experiments/config.py`'s
+`DATASET_REGISTRY`, self-discovered from `experiments/dataset-configs/<key>.py`
+(`vrdu` is the only one so far). `params.dataset_params` is a free-form block whose
+shape is owned by that dataset module, not the runner -- for `vrdu`,
+`{corpus, split_file}` (`run_benchmark.py`) or `{corpus, split_files}`
+(`run_training.py`). Each dataset module implements the `bench_extract.datasets.base` contract
+(`EXTRACTION_PROMPT_TEMPLATE`, `load_run_context`, `load_split_doc_ids`,
+`describe_split`, `training_split_params`); `run_benchmark.py` and `run_training.py`
+dispatch through it rather than importing a dataset's loader directly, so adding a
+second dataset means adding one `dataset-configs/<key>.py` file, not touching the
+runners. `load_run_context`'s returned `DatasetRunContext` also carries
+`windowed_text` and `score_field` -- what counts as "correct" for a field (e.g.
+`vrdu`'s fuzzy date/price/string matching, ported into `datasets/matching.py`) is
+each dataset's business too, never assumed by the shared profiling/evaluation code.
+Likewise, *which fields get extracted* per corpus is declared explicitly in
+`dataset-configs/vrdu.py`'s `CORPORA[corpus].match_func_by_field` -- never inferred
+from whatever `data/vrdu/data.json` (gitignored, regenerable) happens to contain;
+`load_run_context` cross-checks the two and fails loud on disagreement.
+`registration-form`'s field map is a TODO (not yet downloaded in this checkout).
+
 ## The profiling-table spine
 
 `RouteExtractor`, `CascadeExtractor`, and `ScheduleExtractor`
 (`src/bench_extract/extractors/base.py` + the three `*_extractor.py` files) all fit
 against the same artifact: a table with one row per `(document_id, field,
-model_key)` -- prediction, ground truth, `correct` (via `datasets/matching.py`),
-wall-clock time, token usage. Built by `src/bench_extract/profiling.py`. Keying on
-`(document_id, field)` rather than just `document_id` is required for the
-scheduling methods (Abacus, Doctopus), which assign per attribute, not per document.
+model_key)` -- prediction, ground truth, `correct` (via the active dataset's own
+`score_field`, e.g. `vrdu`'s is backed by `datasets/matching.py`), wall-clock time,
+token usage. Built by `src/bench_extract/profiling.py`, which never imports a
+specific dataset's matching logic itself. Keying on `(document_id, field)` rather
+than just `document_id` is required for the scheduling methods (Abacus, Doctopus),
+which assign per attribute, not per document.
 
 Each base class has a real, working baseline strategy (see its module docstring):
 `RouteExtractor` always routes to the best model on the training profile,
@@ -78,6 +102,7 @@ serving.py`'s `endpoint_for()` discovers it from there automatically. See
 ```
 data/                            download_vrdu.py + README; everything else gitignored
 src/bench_extract/
+  datasets/base.py                DatasetRunContext -- the dataset-adapter contract
   datasets/vrdu.py                loads data/vrdu/data.json -> VRDUDocument
   datasets/matching.py            ported VRDU match functions (source: google-research)
   models/base.py                  ExtractionModel ABC + OpenAIChatModel
@@ -89,13 +114,14 @@ src/bench_extract/
   extractors/{hybridllm,routellm,frugalgpt,bargain,task_cascade,automix,abacus,
               doctopus,cascade_routing}.py   method stubs, see module docstrings
 experiments/
-  config.py                       model-configs/dataset-configs loaders, EXTRACTOR_REGISTRY
+  config.py                       model-configs/dataset-configs loaders, EXTRACTOR_REGISTRY, DATASET_REGISTRY
   serving.py                      LocalVLLMServer + endpoint discovery (ported from govscape-extract)
   serve_model.py                  starts one model's server as its own long-running job
   run_benchmark.py                 accuracy vs. efficiency runner
   run_training.py                  training-set-size sweep runner (VRDU's real few_shot-splits)
   model-configs/*.yaml            one file per LLM in M
-  dataset-configs/vrdu.py          per-corpus windowing + extraction prompt template
+  dataset-configs/<key>.py        one file per dataset in DATASET_REGISTRY; vrdu.py is the only
+                                   one so far (per-corpus windowing + extraction prompt template)
   experiment-configs/{benchmark,training}/<id>.yaml
   results/                        gitignored run output
 tests/                            fixture-based unit tests, see tests/fixtures/vrdu_mini/
@@ -109,4 +135,5 @@ implemented and unit-tested. None of the seven methods' actual upstream code
 (HybridLLM, RouteLLM, FrugalGPT, BARGAIN, Task Cascades, Automix, Abacus/Palimpzest,
 Doctopus) or the unified cascade-routing paper is wired in yet -- each adapter file
 documents what that requires. No GPU job has been run; `data/download_vrdu.py` has
-not yet been run to populate `data/vrdu/`.
+been run for `ad-buy-form` only -- `registration-form` is not yet downloaded in this
+checkout (see `dataset-configs/vrdu.py`'s `CORPORA["registration-form"]` TODO).

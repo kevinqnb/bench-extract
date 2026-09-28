@@ -7,12 +7,14 @@ description: >-
   `bash experiments/submit.sh serve gpt-oss-120b`.
 seed: 0
 params:
-  corpus: ad-buy-form
-  split_files:
-    - DeepForm-unk_template-train_10-test_294-valid_100-SD_0
-    - DeepForm-unk_template-train_50-test_239-valid_100-SD_0
-    - DeepForm-unk_template-train_100-test_215-valid_100-SD_0
-    - DeepForm-unk_template-train_200-test_159-valid_100-SD_0
+  dataset: vrdu
+  dataset_params:
+    corpus: ad-buy-form
+    split_files:
+      - DeepForm-unk_template-train_10-test_294-valid_100-SD_0
+      - DeepForm-unk_template-train_50-test_239-valid_100-SD_0
+      - DeepForm-unk_template-train_100-test_215-valid_100-SD_0
+      - DeepForm-unk_template-train_200-test_159-valid_100-SD_0
   model_keys: [gpt-oss-120b]
   methods: [route_baseline]
   limit: null

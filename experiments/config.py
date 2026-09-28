@@ -1,9 +1,10 @@
 """Loads experiment configuration: model-configs/*.yaml (which LLM, what
 hardware, how it's served), EXTRACTOR_REGISTRY (which class each
-params.method name in an experiment config resolves to), the VRDU
-dataset-config module, and the config envelope every experiments/
-experiment-configs/{benchmark,training}/<id>.yaml must have
-(id/project/description/seed/params -- see notes/hub/conventions.md).
+params.method name in an experiment config resolves to), DATASET_REGISTRY
+(which dataset-configs/<key>.py module a params.dataset name resolves to --
+see bench_extract.datasets.base for the module contract), and the config
+envelope every experiments/experiment-configs/{benchmark,training}/<id>.yaml
+must have (id/project/description/seed/params -- see notes/hub/conventions.md).
 
 Mirrors govscape-extract/experiments/config.py's split between *intent*
 (this module) and *runtime facts* (experiments/runtime.py's RunManifest).
@@ -123,39 +124,43 @@ EXTRACTOR_REGISTRY: dict[str, ExtractorSpec] = {
 }
 
 
-# --- Dataset config (experiments/dataset-configs/vrdu.py) -------------------
+# --- Dataset registry (experiments/dataset-configs/<key>.py) ----------------
 # Loaded by path, not imported: "dataset-configs" has a hyphen, so it can't
-# be a Python package.
+# be a Python package. Each module is the single per-dataset customization
+# point (corpus/windowing/prompt-template plus the load_run_context /
+# load_split_doc_ids / describe_split functions run_benchmark.py and
+# run_training.py dispatch through via params["dataset"]) -- see
+# bench_extract.datasets.base for the required contract and
+# dataset-configs/vrdu.py for the reference implementation.
 
-_dataset_config_module_cache: Optional[ModuleType] = None
-
-
-def _dataset_config_module(directory: Path = DATASET_CONFIGS_DIR) -> ModuleType:
-    global _dataset_config_module_cache
-    if _dataset_config_module_cache is None:
-        spec = importlib.util.spec_from_file_location("bench_extract_vrdu_dataset_config", directory / "vrdu.py")
-        module = importlib.util.module_from_spec(spec)
-        # Must be registered in sys.modules *before* exec: the module's own
-        # `@dataclass` fields use postponed annotations (`from __future__
-        # import annotations`), and dataclasses resolves those string
-        # annotations by looking the module back up in sys.modules.
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        _dataset_config_module_cache = module
-    return _dataset_config_module_cache
+_REQUIRED_DATASET_MODULE_ATTRS = (
+    "EXTRACTION_PROMPT_TEMPLATE",
+    "load_run_context",
+    "load_split_doc_ids",
+    "describe_split",
+    "training_split_params",
+)
 
 
-def load_dataset_config(corpus: str, directory: Path = DATASET_CONFIGS_DIR):
-    """Returns the dataset-configs/vrdu.py VRDUCorpusConfig for `corpus`
-    (e.g. "ad-buy-form")."""
-    module = _dataset_config_module(directory)
-    if corpus not in module.CORPORA:
-        raise KeyError(f"Unknown corpus {corpus!r}; choices: {sorted(module.CORPORA)}")
-    return module.CORPORA[corpus]
+def _load_dataset_module(path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(f"bench_extract_dataset_config_{path.stem}", path)
+    module = importlib.util.module_from_spec(spec)
+    # Must be registered in sys.modules *before* exec: the module's own
+    # `@dataclass` fields use postponed annotations (`from __future__
+    # import annotations`), and dataclasses resolves those string
+    # annotations by looking the module back up in sys.modules.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    missing = [attr for attr in _REQUIRED_DATASET_MODULE_ATTRS if not hasattr(module, attr)]
+    assert not missing, f"{path}: dataset module missing required attrs: {missing}"
+    return module
 
 
-def load_extraction_prompt_template(directory: Path = DATASET_CONFIGS_DIR) -> str:
-    return _dataset_config_module(directory).EXTRACTION_PROMPT_TEMPLATE
+def load_dataset_registry(directory: Path = DATASET_CONFIGS_DIR) -> dict[str, ModuleType]:
+    return {path.stem: _load_dataset_module(path) for path in sorted(directory.glob("*.py"))}
+
+
+DATASET_REGISTRY: dict[str, ModuleType] = load_dataset_registry()
 
 
 # --- Config envelope (notes/hub/conventions.md) ------------------------------

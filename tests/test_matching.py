@@ -58,3 +58,12 @@ def test_match_checks_any_of_multiple_ground_truth_occurrences():
 
 def test_match_empty_ground_truth_is_no_match():
     assert not matching.GeneralStringMatch.match("Acme Corp", [])
+
+
+def test_score_prediction_correct_and_incorrect():
+    assert matching.score_prediction(["Acme Corp"], ["Acme Corp"], "GeneralStringMatch")
+    assert not matching.score_prediction(["Widget Inc"], ["Acme Corp"], "GeneralStringMatch")
+
+
+def test_score_prediction_empty_prediction_is_incorrect():
+    assert not matching.score_prediction([], ["Acme Corp"], "GeneralStringMatch")

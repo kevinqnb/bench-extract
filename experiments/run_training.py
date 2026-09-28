@@ -1,16 +1,20 @@
 """Config-dispatched runner: training-dataset-size sweep for a given
-extraction strategy across VRDU's official few_shot-splits train sizes
-(10/50/100/200) and seeds -- the project's "Training Dataset Size
-experiments." Reuses run_benchmark's model-profiling/evaluation plumbing
-per split file rather than reimplementing it.
+extraction strategy across a dataset's split-file ladder (for VRDU: its
+official few_shot-splits train sizes 10/50/100/200, across seeds) -- the
+project's "Training Dataset Size experiments." Reuses run_benchmark's
+model-profiling/evaluation plumbing per split file rather than
+reimplementing it.
 
     uv run -m experiments.run_training experiments/experiment-configs/training/<id>.yaml
 
 Expected params:
-    corpus: str              -- experiments/dataset-configs/vrdu.py's CORPORA key
-    split_files: list[str]   -- data/vrdu/few_shot-splits/<corpus>/<name>.json,
-                                 each decoded for its train_size/seed via VRDU's own
-                                 naming convention (...-train_N-...-SD_S)
+    dataset: str              -- experiments.config.DATASET_REGISTRY key
+                                  (experiments/dataset-configs/<dataset>.py)
+    dataset_params: dict      -- shape owned by that dataset module; for "vrdu":
+                                    corpus: str            -- dataset-configs/vrdu.py's CORPORA key
+                                    split_files: list[str]  -- data/vrdu/few_shot-splits/<corpus>/<name>.json,
+                                                                each decoded for its train_size/seed via VRDU's
+                                                                own naming convention (...-train_N-...-SD_S)
     model_keys: list[str]
     methods: list[str]
     limit: Optional[int]     -- cap documents per partition (debugging)
@@ -25,7 +29,6 @@ import contextlib
 import dataclasses
 import json
 import os
-import re
 import shutil
 import socket
 import sys
@@ -36,27 +39,16 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from bench_extract.datasets import vrdu
 from bench_extract.models.base import OpenAIChatModel
 from bench_extract.profiling import build_profiling_table
 
-from experiments.config import EXTRACTOR_REGISTRY, MODEL_REGISTRY, load_dataset_config, load_experiment_config, load_extraction_prompt_template
+from experiments.config import DATASET_REGISTRY, EXTRACTOR_REGISTRY, MODEL_REGISTRY, load_experiment_config
 from experiments.run_benchmark import RELEVANT_PACKAGES, _evaluate_extractor, _profile_models, _resolve_split_docs
 from experiments.runtime import RunManifest, Tee, git_sha, installed_versions
 from experiments.serving import endpoint_for
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "experiments" / "results" / "training"
-
-# e.g. "DeepForm-unk_template-train_100-test_215-valid_100-SD_0" -> train_size=100, seed=0
-_SPLIT_NAME_RE = re.compile(r"train_(\d+)-test_\d+-valid_\d+-SD_(\d+)")
-
-
-def _decode_split_file(name: str) -> tuple[int, int]:
-    match = _SPLIT_NAME_RE.search(name)
-    if not match:
-        raise ValueError(f"Cannot decode train_size/seed from split file name {name!r}")
-    return int(match.group(1)), int(match.group(2))
 
 
 def run_training(
@@ -69,13 +61,16 @@ def run_training(
 ) -> Optional[Path]:
     config = load_experiment_config(config_path)
     params = config.params
-    corpus = params["corpus"]
-    dataset_cfg = load_dataset_config(corpus)
-    schema = vrdu.load_corpus_schema(corpus)
-    fields = sorted(schema.entity_name_to_match_func)
-    prompt_template = load_extraction_prompt_template()
+    dataset = params["dataset"]
+    if dataset not in DATASET_REGISTRY:
+        raise SystemExit(f"Unknown dataset {dataset!r}; choices: {sorted(DATASET_REGISTRY)}")
+    dataset_mod = DATASET_REGISTRY[dataset]
+    dataset_params = params["dataset_params"]
+    sweep_params = dataset_mod.training_split_params(dataset_params)
+
+    ctx = dataset_mod.load_run_context(dataset_params)
+    prompt_template = dataset_mod.EXTRACTION_PROMPT_TEMPLATE
     limit = limit_override if limit_override is not None else params.get("limit")
-    all_docs = {d.document_id: d for d in vrdu.load_documents(corpus)}
 
     output_root = output_root_override or DEFAULT_OUTPUT_ROOT
     run_dir = output_root / config.id
@@ -86,9 +81,9 @@ def run_training(
     manifest.started_at = datetime.now(timezone.utc).isoformat()
     manifest.host = socket.gethostname()
     manifest.job_id = os.environ.get("JOB_ID")  # set by SGE under qsub; None for an interactive run
-    manifest.extra = {"corpus": corpus, "split_files": params["split_files"], "methods": params["methods"], "model_keys": params["model_keys"]}
+    manifest.extra = {"dataset": dataset, "dataset_params": dataset_params, "methods": params["methods"], "model_keys": params["model_keys"]}
 
-    print(f"[{config.id}] corpus={corpus} split_files={params['split_files']}")
+    print(f"[{config.id}] dataset={dataset} dataset_params={dataset_params} ({len(sweep_params)} sweep point(s))")
 
     if dry_run:
         print(json.dumps(dataclasses.asdict(manifest), indent=2, default=str))
@@ -121,24 +116,24 @@ def run_training(
                     response_format=model_config.response_format,
                 )
 
-            for split_file in params["split_files"]:
-                train_size, seed = _decode_split_file(split_file)
-                splits = vrdu.load_split(corpus, split_file)
-                train_docs = _resolve_split_docs(splits["train"], all_docs, limit, f"{split_file} train")
-                valid_docs = _resolve_split_docs(splits["valid"], all_docs, limit, f"{split_file} valid")
+            for split_params in sweep_params:
+                split_desc = dataset_mod.describe_split(split_params)
+                label = "__".join(f"{k}_{v}" for k, v in split_desc.items())
+                train_docs = _resolve_split_docs(dataset_mod.load_split_doc_ids(split_params, "train"), ctx.all_docs, limit, f"{label} train")
+                valid_docs = _resolve_split_docs(dataset_mod.load_split_doc_ids(split_params, "valid"), ctx.all_docs, limit, f"{label} valid")
                 if not train_docs or not valid_docs:
-                    raise SystemExit(f"No documents found for split_file={split_file!r} (check data/download_vrdu.py was run).")
+                    raise SystemExit(f"No documents found for dataset_params={split_params!r} (check the dataset was downloaded).")
 
-                print(f"[{config.id}] {split_file}: train_size={train_size} seed={seed}, profiling {len(models)} model(s) on {len(train_docs)} doc(s)...")
-                run_predictions, timing = _profile_models(models, train_docs, fields, dataset_cfg.max_pages, dataset_cfg.max_chars)
-                profiling_table = build_profiling_table(run_predictions, all_docs, schema, timing)
+                print(f"[{config.id}] {label}: profiling {len(models)} model(s) on {len(train_docs)} doc(s)...")
+                run_predictions, timing = _profile_models(models, train_docs, ctx.fields, ctx.windowed_text)
+                profiling_table = build_profiling_table(run_predictions, ctx.all_docs, ctx.fields, ctx.score_field, timing)
 
                 for method in params["methods"]:
                     spec = EXTRACTOR_REGISTRY[method]
                     extractor = spec.extractor_cls(list(models.values()), **method_kwargs.get(method, {}))
                     extractor.fit(profiling_table)
-                    result_metrics = _evaluate_extractor(extractor, valid_docs, fields, schema, dataset_cfg.max_pages, dataset_cfg.max_chars)
-                    prefix = f"{method}__trainsize_{train_size}__seed_{seed}"
+                    result_metrics = _evaluate_extractor(extractor, valid_docs, ctx.fields, ctx.score_field, ctx.windowed_text)
+                    prefix = f"{method}__{label}"
                     for k, v in result_metrics.items():
                         metrics[f"{prefix}_{k}"] = v
 
