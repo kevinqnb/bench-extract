@@ -18,7 +18,7 @@ def test_model_registry_loads_gpt_oss_120b():
     config = MODEL_REGISTRY["gpt-oss-120b"]
     assert config.key == "gpt-oss-120b"
     assert config.serving == "external"
-    assert config.base_url_env == "ROUTE_EXTRACT_GPT_OSS_120B_BASE_URL"
+    assert config.base_url_env == "BENCH_EXTRACT_GPT_OSS_120B_BASE_URL"
     assert config.hardware.device == "cuda"
     assert config.hardware.gpu_count == 1
 
@@ -74,7 +74,7 @@ def test_load_experiment_config_example_benchmark_config():
     path = EXPERIMENT_CONFIGS_DIR / "benchmark" / "2026-09-21-example-benchmark-01.yaml"
     config = load_experiment_config(path)
     assert config.id == "2026-09-21-example-benchmark-01"
-    assert config.project == "route-extract"
+    assert config.project == "bench-extract"
     assert config.params["corpus"] == "ad-buy-form"
     assert "route_baseline" in config.params["methods"]
 
@@ -88,7 +88,7 @@ def test_load_experiment_config_example_training_config():
 
 def test_load_experiment_config_missing_key_raises(tmp_path):
     path = tmp_path / "2026-01-01-bad-config-01.yaml"
-    path.write_text(yaml.dump({"id": "2026-01-01-bad-config-01", "project": "route-extract", "seed": 0, "params": {}}))
+    path.write_text(yaml.dump({"id": "2026-01-01-bad-config-01", "project": "bench-extract", "seed": 0, "params": {}}))
     with pytest.raises(AssertionError):
         load_experiment_config(path)
 
@@ -96,7 +96,7 @@ def test_load_experiment_config_missing_key_raises(tmp_path):
 def test_load_experiment_config_id_filename_mismatch_raises(tmp_path):
     path = tmp_path / "2026-01-01-actual-name-01.yaml"
     path.write_text(
-        yaml.dump({"id": "2026-01-01-different-id-01", "project": "route-extract", "description": "x", "seed": 0, "params": {}})
+        yaml.dump({"id": "2026-01-01-different-id-01", "project": "bench-extract", "description": "x", "seed": 0, "params": {}})
     )
     with pytest.raises(AssertionError):
         load_experiment_config(path)

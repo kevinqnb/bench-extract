@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from route_extract.extractors.base import ExtractionResult, ExtractionStep, MultiModelExtractor
+from bench_extract.extractors.base import ExtractionResult, ExtractionStep, MultiModelExtractor
 
 
 class ScheduleExtractor(MultiModelExtractor):

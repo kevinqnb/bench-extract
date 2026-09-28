@@ -36,9 +36,9 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from route_extract.datasets import vrdu
-from route_extract.models.base import OpenAIChatModel
-from route_extract.profiling import build_profiling_table
+from bench_extract.datasets import vrdu
+from bench_extract.models.base import OpenAIChatModel
+from bench_extract.profiling import build_profiling_table
 
 from experiments.config import EXTRACTOR_REGISTRY, MODEL_REGISTRY, load_dataset_config, load_experiment_config, load_extraction_prompt_template
 from experiments.run_benchmark import RELEVANT_PACKAGES, _evaluate_extractor, _profile_models, _resolve_split_docs

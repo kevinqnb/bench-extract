@@ -4,12 +4,12 @@
 VRDU: https://arxiv.org/abs/2211.15421
 Data:  https://github.com/google-research-datasets/vrdu
 Eval:  https://github.com/google-research/google-research/tree/master/vrdu
-       (route_extract.datasets.matching ports its match functions)
+       (bench_extract.datasets.matching ports its match functions)
 
 Always clones fresh (no dependency on any local checkout of the vrdu repo) into
 a temporary directory, then reshapes into this project's layout -- one flat
 data.json keyed by document_id (the PDF filename's stem) instead of VRDU's
-per-corpus dataset.jsonl, so route_extract.datasets.vrdu doesn't need to know
+per-corpus dataset.jsonl, so bench_extract.datasets.vrdu doesn't need to know
 about the corpus-specific `main/` layout or jsonl/gzip framing. See
 data/README.md for the produced layout.
 

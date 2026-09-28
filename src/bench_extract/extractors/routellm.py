@@ -8,7 +8,7 @@ Code: https://github.com/ulab-uiuc/LLMRouter/tree/main/llmrouter/models/mfrouter
 Not wired in yet. Wiring this in means depending on `llmrouter` (add a
 `routellm` extra to pyproject.toml, isolated from the other adapters'
 dependencies per the note there) and adapting its router-training loop to
-consume `profiling_table` (route_extract.profiling) instead of preference
+consume `profiling_table` (bench_extract.profiling) instead of preference
 pairs. Until then, `RouteExtractor`'s always-best-model baseline is
 available directly via `RouteExtractor(models).fit(profiling_table)`.
 """
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from route_extract.extractors.route_extractor import RouteExtractor
+from bench_extract.extractors.route_extractor import RouteExtractor
 
 
 class RouteLLMExtractor(RouteExtractor):

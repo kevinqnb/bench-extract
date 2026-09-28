@@ -32,8 +32,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from route_extract.datasets import matching
-from route_extract.datasets.vrdu import CorpusSchema, VRDUDocument
+from bench_extract.datasets import matching
+from bench_extract.datasets.vrdu import CorpusSchema, VRDUDocument
 
 PROFILING_TABLE_COLUMNS = [
     "document_id",

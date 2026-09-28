@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-# src/route_extract/datasets/vrdu.py -> repo root is four parents up.
+# src/bench_extract/datasets/vrdu.py -> repo root is four parents up.
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[3] / "data" / "vrdu"
 
 

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from route_extract.datasets import vrdu
+from bench_extract.datasets import vrdu
 
 FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures" / "vrdu_mini"
 

@@ -7,7 +7,7 @@ Code: https://github.com/ucbepic/task-cascades
 Not wired in yet. Wiring this in means depending on task-cascades' package
 (add a `task_cascade` extra to pyproject.toml, isolated from the other
 adapters' dependencies per the note there) and adapting its per-task
-calibration to consume `profiling_table` (route_extract.profiling), where
+calibration to consume `profiling_table` (bench_extract.profiling), where
 "task" maps onto this project's `field`. Until then, `CascadeExtractor`'s
 fixed-order/non-empty-field baseline is available directly via
 `CascadeExtractor(models).fit(profiling_table)`.
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from route_extract.extractors.cascade_extractor import CascadeExtractor
+from bench_extract.extractors.cascade_extractor import CascadeExtractor
 
 
 class TaskCascadeExtractor(CascadeExtractor):

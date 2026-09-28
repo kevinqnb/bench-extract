@@ -36,10 +36,10 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from route_extract.datasets import vrdu
-from route_extract.datasets.vrdu import VRDUDocument, windowed_text
-from route_extract.models.base import OpenAIChatModel
-from route_extract.profiling import build_profiling_table, score_prediction
+from bench_extract.datasets import vrdu
+from bench_extract.datasets.vrdu import VRDUDocument, windowed_text
+from bench_extract.models.base import OpenAIChatModel
+from bench_extract.profiling import build_profiling_table, score_prediction
 
 from experiments.config import EXTRACTOR_REGISTRY, MODEL_REGISTRY, load_dataset_config, load_experiment_config, load_extraction_prompt_template
 from experiments.runtime import RunManifest, Tee, git_sha, installed_versions

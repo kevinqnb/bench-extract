@@ -17,7 +17,7 @@ from typing import Optional
 
 from openai import OpenAI
 
-from route_extract.utils.timing import UsageRecord
+from bench_extract.utils.timing import UsageRecord
 
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 

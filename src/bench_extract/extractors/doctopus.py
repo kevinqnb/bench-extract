@@ -9,7 +9,7 @@ Code: https://github.com/mutong184/Doctopus
 Not wired in yet. Wiring this in means depending on Doctopus's package (add
 a `doctopus` extra to pyproject.toml, isolated from the other adapters'
 dependencies per the note there) and adapting its per-attribute profiling
-and assignment solver to consume `profiling_table` (route_extract.profiling)
+and assignment solver to consume `profiling_table` (bench_extract.profiling)
 directly, since it already matches Doctopus's own (document, attribute,
 model) granularity. Until then, `ScheduleExtractor`'s greedy
 cheapest-above-accuracy-floor baseline is available directly via
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from route_extract.extractors.schedule_extractor import ScheduleExtractor
+from bench_extract.extractors.schedule_extractor import ScheduleExtractor
 
 
 class DoctopusExtractor(ScheduleExtractor):

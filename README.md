@@ -1,6 +1,6 @@
-# route-extract
+# bench-extract
 
-[![attested by humans](https://github.com/kevinqnb/route-extract/actions/workflows/git-signoff.yml/badge.svg)](https://github.com/kevinqnb/route-extract/actions/workflows/git-signoff.yml)
+[![attested by humans](https://github.com/kevinqnb/bench-extract/actions/workflows/git-signoff.yml/badge.svg)](https://github.com/kevinqnb/bench-extract/actions/workflows/git-signoff.yml)
 
 Benchmarking routing, cascade, and scheduling strategies for information
 extraction -- methods that take a collection of extraction models (LLMs or
@@ -16,7 +16,7 @@ field spans.
 
 - Original dataset: https://github.com/google-research-datasets/vrdu
 - Original evaluator (match functions ported into
-  `src/route_extract/datasets/matching.py`, cited there):
+  `src/bench_extract/datasets/matching.py`, cited there):
   https://github.com/google-research/google-research/tree/master/vrdu
 
 Run `uv run data/download_vrdu.py` to download and reshape it into
@@ -25,7 +25,7 @@ Run `uv run data/download_vrdu.py` to download and reshape it into
 ## Methods
 
 Benchmarks strategies from the following papers, each via its own adapter in
-`src/route_extract/extractors/`:
+`src/bench_extract/extractors/`:
 
 | Type | Method | Paper | Code |
 |---|---|---|---|

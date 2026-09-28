@@ -20,19 +20,19 @@ from typing import Literal, Optional
 
 import yaml
 
-from route_extract.extractors.abacus import AbacusExtractor
-from route_extract.extractors.automix import AutomixExtractor
-from route_extract.extractors.bargain import BargainExtractor
-from route_extract.extractors.base import MultiModelExtractor
-from route_extract.extractors.cascade_extractor import CascadeExtractor
-from route_extract.extractors.cascade_routing import CascadeRoutingExtractor
-from route_extract.extractors.doctopus import DoctopusExtractor
-from route_extract.extractors.frugalgpt import FrugalGPTExtractor
-from route_extract.extractors.hybridllm import HybridLLMExtractor
-from route_extract.extractors.route_extractor import RouteExtractor
-from route_extract.extractors.routellm import RouteLLMExtractor
-from route_extract.extractors.schedule_extractor import ScheduleExtractor
-from route_extract.extractors.task_cascade import TaskCascadeExtractor
+from bench_extract.extractors.abacus import AbacusExtractor
+from bench_extract.extractors.automix import AutomixExtractor
+from bench_extract.extractors.bargain import BargainExtractor
+from bench_extract.extractors.base import MultiModelExtractor
+from bench_extract.extractors.cascade_extractor import CascadeExtractor
+from bench_extract.extractors.cascade_routing import CascadeRoutingExtractor
+from bench_extract.extractors.doctopus import DoctopusExtractor
+from bench_extract.extractors.frugalgpt import FrugalGPTExtractor
+from bench_extract.extractors.hybridllm import HybridLLMExtractor
+from bench_extract.extractors.route_extractor import RouteExtractor
+from bench_extract.extractors.routellm import RouteLLMExtractor
+from bench_extract.extractors.schedule_extractor import ScheduleExtractor
+from bench_extract.extractors.task_cascade import TaskCascadeExtractor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MODEL_CONFIGS_DIR = Path(__file__).resolve().parent / "model-configs"
@@ -62,7 +62,7 @@ class LLMModelConfig:
     role: Literal["candidate"] = "candidate"
     serving: Literal["local_vllm", "external"] = "external"
     base_url_env: Optional[str] = None
-    api_key_env: str = "ROUTE_EXTRACT_LLM_API_KEY"
+    api_key_env: str = "BENCH_EXTRACT_LLM_API_KEY"
     hardware: HardwareRequirement = field(default_factory=HardwareRequirement)
     vllm_args: list[str] = field(default_factory=list)
     temperature: Optional[float] = 0.0
@@ -133,7 +133,7 @@ _dataset_config_module_cache: Optional[ModuleType] = None
 def _dataset_config_module(directory: Path = DATASET_CONFIGS_DIR) -> ModuleType:
     global _dataset_config_module_cache
     if _dataset_config_module_cache is None:
-        spec = importlib.util.spec_from_file_location("route_extract_vrdu_dataset_config", directory / "vrdu.py")
+        spec = importlib.util.spec_from_file_location("bench_extract_vrdu_dataset_config", directory / "vrdu.py")
         module = importlib.util.module_from_spec(spec)
         # Must be registered in sys.modules *before* exec: the module's own
         # `@dataclass` fields use postponed annotations (`from __future__

@@ -1,5 +1,5 @@
 id: 2026-09-21-example-training-01
-project: route-extract
+project: bench-extract
 description: >-
   Example training-size sweep: route_baseline accuracy/efficiency vs. VRDU's
   official train_{10,50,100,200} splits (SD_0) on the ad-buy-form

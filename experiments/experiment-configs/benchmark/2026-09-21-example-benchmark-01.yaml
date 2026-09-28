@@ -1,5 +1,5 @@
 id: 2026-09-21-example-benchmark-01
-project: route-extract
+project: bench-extract
 description: >-
   Example accuracy-vs-efficiency benchmark: route/cascade/schedule baselines
   on the ad-buy-form validation split. Only one model_key is configured so far

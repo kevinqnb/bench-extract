@@ -217,7 +217,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# route-extract project-specific
+# bench-extract project-specific
 
 # VRDU data -- regenerate with `uv run data/download_vrdu.py`
 data/vrdu/

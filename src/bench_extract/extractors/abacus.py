@@ -8,7 +8,7 @@ Code: https://github.com/mitdbg/palimpzest
 Not wired in yet. Wiring this in means depending on `palimpzest` (add an
 `abacus` extra to pyproject.toml, isolated from the other adapters'
 dependencies per the note there) and adapting its plan-optimization step to
-consume `profiling_table` (route_extract.profiling) as the per-operator
+consume `profiling_table` (bench_extract.profiling) as the per-operator
 cost/quality sample it optimizes over. Until then, `ScheduleExtractor`'s
 greedy cheapest-above-accuracy-floor baseline is available directly via
 `ScheduleExtractor(models).fit(profiling_table)`.
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from route_extract.extractors.schedule_extractor import ScheduleExtractor
+from bench_extract.extractors.schedule_extractor import ScheduleExtractor
 
 
 class AbacusExtractor(ScheduleExtractor):

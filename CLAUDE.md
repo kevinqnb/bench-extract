@@ -1,4 +1,4 @@
-# route-extract
+# bench-extract
 
 Benchmarks pre-existing routing / cascade / scheduling strategies for information
 extraction -- methods that take a fixed collection of extraction models M (LLMs or
@@ -32,7 +32,7 @@ from Complex Documents"): `ad-buy-form` (aka DeepForm, FCC political ad-buy form
 and `registration-form` (aka FARA, foreign-agent registration forms). Original data:
 https://github.com/google-research-datasets/vrdu. Original evaluator:
 https://github.com/google-research/google-research/tree/master/vrdu -- its match
-functions are ported (not reinvented) into `src/route_extract/datasets/matching.py`.
+functions are ported (not reinvented) into `src/bench_extract/datasets/matching.py`.
 
 Everything under `data/` is gitignored except `data/README.md` and
 `data/download_vrdu.py`. Run `uv run data/download_vrdu.py` once to populate it. See
@@ -41,10 +41,10 @@ Everything under `data/` is gitignored except `data/README.md` and
 ## The profiling-table spine
 
 `RouteExtractor`, `CascadeExtractor`, and `ScheduleExtractor`
-(`src/route_extract/extractors/base.py` + the three `*_extractor.py` files) all fit
+(`src/bench_extract/extractors/base.py` + the three `*_extractor.py` files) all fit
 against the same artifact: a table with one row per `(document_id, field,
 model_key)` -- prediction, ground truth, `correct` (via `datasets/matching.py`),
-wall-clock time, token usage. Built by `src/route_extract/profiling.py`. Keying on
+wall-clock time, token usage. Built by `src/bench_extract/profiling.py`. Keying on
 `(document_id, field)` rather than just `document_id` is required for the
 scheduling methods (Abacus, Doctopus), which assign per attribute, not per document.
 
@@ -81,7 +81,7 @@ serving.py`'s `endpoint_for()` discovers it from there automatically. See
 
 ```
 data/                            download_vrdu.py + README; everything else gitignored
-src/route_extract/
+src/bench_extract/
   datasets/vrdu.py                loads data/vrdu/data.json -> VRDUDocument
   datasets/matching.py            ported VRDU match functions (source: google-research)
   models/base.py                  ExtractionModel ABC + OpenAIChatModel

@@ -1,5 +1,5 @@
-from route_extract.datasets.vrdu import CorpusSchema, VRDUDocument
-from route_extract.profiling import build_profiling_table, score_prediction
+from bench_extract.datasets.vrdu import CorpusSchema, VRDUDocument
+from bench_extract.profiling import build_profiling_table, score_prediction
 
 SCHEMA = CorpusSchema(
     dataset_name="TestCorpus",
