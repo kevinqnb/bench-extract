@@ -1,0 +1,29 @@
+[SIGNOFF 9426b74]: human comprehension and risk attestation
+
+Rename route-extract->bench-extract plus generalizing the experiment-config dataset loading into a pluggable DATASET_REGISTRY (VRDU is the only registered dataset), two new devlog-writing project skills, and a devlog entry. Reviewed component-by-component at skeptical tier (science-signal + executable-blast-radius escalation); several pre-existing and newly-surfaced silent-failure risks in the evaluation/scoring path were identified and explicitly accepted by the branch owner as known, deferred, or acceptable for this pre-production skeleton stage, with no code changes made during review.
+
+Signoff-Spec-Version: 1.0
+Signoff-Status: VERIFIED_BY_HUMAN
+Signoff-Timestamp: 2026-09-28T14:33:54Z
+Signoff-Base-SHA: 4a88e11e31c2e993c16bd9233454370a4975243d
+Signoff-Reviewed-Commit-SHA: 9426b74736542f68f9e7cff225c339d5f056475e
+Signoff-Reviewed-Tree-SHA: 203a4453d9b6705fc04cbb6000248d9d4b141c5c
+Signoff-Harness-ID: claude-code
+Signoff-Conversation-ID: cfc7a65c-8b11-445a-bf2c-057c08dcb7e8
+Signoff-Transcript-Digest: sha256:79b02676e9854aad59437cb149a28cd3fbd27858c3ff1314cb12750bf4e4d6da
+Signoff-Transcript-Bytes: 1196122
+Signoff-Tradeoff: domain-science profile applied by loose analogy to this NLP/LLM-benchmarking repo (units/CFL/moist-thermodynamics emphases skipped, statistical-validity/reproducibility translated) rather than a repo-fitted profile
+Signoff-Tradeoff: developlog/experimentlog skills' step-4 devlog commit+push has no explicit human go-ahead gate, unlike step 2's code commit -- intentional, deemed low-stakes
+Signoff-Tradeoff: cosmetic route-extract->bench-extract rename verified only by grep + full test suite (62 passed), no additional guardrails added
+Signoff-Tradeoff: experiment-config envelope's seed field is currently decorative/unused, superseded by VRDU's own per-split SD_S seed; reserved for a future dataset with no built-in seed
+Signoff-Tradeoff: DATASET_REGISTRY's per-module contract validation uses a plain assert (strippable under -O) and treats every *.py in dataset-configs/ as a dataset module, failing import-wide (not silently) on a malformed one -- accepted, deemed preferable to a narrower glob
+Signoff-Risk: OpenAIChatModel.extract's blanket except-Exception swallows API/auth errors (e.g. a stale ROUTE_EXTRACT_LLM_API_KEY after this rename); the run completes with status=success and 0%-accuracy with no error trace in metrics.json/run.json -- pre-existing behavior, accepted given no real runs or users yet
+Signoff-Risk: DateMatch scores a correct-but-partial date extraction (missing year) as wrong; inherited unchanged from VRDU's official evaluator, accepted for comparability with published VRDU results
+Signoff-Risk: dataset-configs/vrdu.py's CORPORA/data.json drift guard has not yet been exercised against a real re-download of ad-buy-form; deferred to upcoming experiment work
+Signoff-Risk: describe_split's label (train_size+seed only, dropping template name) can collide across split files sharing train_size/seed under different templates, silently overwriting one method's metrics.json entry -- not triggered by the currently committed configs
+Signoff-Risk: _evaluate_extractor's accuracy denominator is always the full corpus field list; a model correctly returning nothing for a field absent from a given document's ground truth is still scored wrong on it, deflating accuracy for reasons unrelated to extraction quality
+Signoff-Risk: matching.MATCH_FUNCS.get(name, DefaultMatch) silently downgrades any unrecognized match-function name to strict-equality scoring, with no validation against the known set; not caught by the CORPORA/data.json drift guard
+Signoff-Risk: ScheduleExtractor's default min_accuracy=0.0 makes the accuracy floor a no-op, so schedule_baseline defaults to pure cost-minimization and could prefer a fast-failing 0%-accuracy model over a slower correct one
+Signoff-Risk: devlog/develop/2026-09-28-pluggable-datasets-01.md's claim that drift checks were exercised against real downloaded data is unverified per this interview and will be re-verified with an actual dry-run
+Signoff-Verified-By: quinnk@bu.edu
+Signoff-Agent: harness=claude-code/N/A model=claude-sonnet-5 reasoning=high interview=skeptical/domain-science/sha256:f8508fa3740f
