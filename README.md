@@ -42,6 +42,23 @@ Benchmarks strategies from the following papers, each via its own adapter in
 Every method fits against the same profiling table -- see `CLAUDE.md` for the
 design and current implementation status.
 
-## Development
-* `/devlog` run after a build to log prompt and implementation details to the devlog directory
-* `/signoff` run before opening a PR to audit and verify code with claude before pushing
+## Skills
+
+Project skills in `.claude/skills/`, available to anyone who clones this repo:
+
+- **`/developlog [id]`** -- run after a build/development session, to leave a durable
+  record of what was asked for and what was built: the prompts that drove the
+  session and a pointer-length summary of the implementation, paired with the
+  commit(s) that carry it. Writes `devlog/develop/<id>.md`.
+- **`/experimentlog [id]`** -- run after an experiment session, or once a submitted
+  job finishes, to record what was asked for and what was run: the experiment
+  prompts, the hypothesis behind the run (kept verbatim), and the config/entry point
+  used, paired with the commit that carries the config. Writes
+  `devlog/experiment/<id>.md`.
+- **`/git-signoff`** -- run before opening a PR, to maintain human ownership over the
+  code: a Socratic interview verifying the reviewer actually understands the diff
+  and explicitly accepts its risks and trade-offs, recorded as a signed attestation
+  commit.
+
+See `devlog/README.md` for the devlog/experimentlog file format and
+`.claude/skills/git-signoff/SKILL.md` for the signoff protocol.

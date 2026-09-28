@@ -1,46 +1,72 @@
 # devlog
 
-A per-build / per-experiment record of **what was asked for** and **what was
-built**, for AI-assisted development in this repo.
+A per-session record of **what was asked for** and **what was built or run**, for
+AI-assisted development in this repo. Public and curated: anyone who clones the repo
+sees this. Deeper rationale, hypotheses, and result assessments (when they exist) are
+kept outside this repo, in whichever private notes system a given contributor uses --
+this directory only ever holds the shareable subset.
 
-Each file pairs the human-written prompts that drove a piece of work with a short
-summary of what landed and the commits that carry it. This is the public, curated
-disclosure record. The full rationale, hypotheses, staged-gate results, and
-assessments live in the private research-notes repo (`notes/`, not committed here).
+## Two kinds of session, two subfolders
 
-## One file per contract id
+- `devlog/develop/<id>.md` -- a build/development session: code was written or
+  changed.
+- `devlog/experiment/<id>.md` -- an experiment session: a run was configured and
+  launched.
 
-`devlog/<id>.md`, where `<id>` is the contract id (`YYYY-MM-DD-slug-NN`) -- the same
-string used by `experiments/experiment-configs/{benchmark,training}/<id>.yaml`, the
-private build/experiment note, and the run directory. See `notes/hub/conventions.md`.
+`<id>` is the contract id (`YYYY-MM-DD-slug-NN`, see `CLAUDE.md`) -- the same string
+used by `experiments/experiment-configs/{benchmark,training}/<id>.yaml` and the run
+directory `experiments/results/{benchmark,training}/<id>/`. A file is only created
+for an `<id>` that corresponds to an actual registered build or experiment; a one-off
+refactor, dependency bump, or bug fix is covered by its commit message alone and gets
+no devlog file.
 
-A `devlog/` file is only created for an `<id>` that also exists as a build or
-experiment note. Work that is not a registered build or experiment (one-off
-refactors, dependency bumps, bug fixes) is covered by its commit message and the
-`Claude-Session:` trailer -- it does not get a `devlog/` file.
+## What goes in a `develop/<id>.md` file
 
-## What goes in a file
-
-Frontmatter, then one `## Session <date>` block per working session (never rewrite
-earlier blocks):
+Frontmatter (`id`, `config` -- the config path if this build has one, omitted
+otherwise), then one `## Session <date>` block per working session on that id (never
+rewrite earlier blocks):
 
 - **Prompts** -- the instructions the human gave, verbatim or lightly trimmed.
   Substantive ones only; drop typo-fixes and bare approvals.
-- **Implemented** -- 3-5 sentences by Claude: what changed, which entry points, which
-  configs, which ladder rungs passed. A pointer-length summary, not a copy of the
-  private note.
+- **Implemented** -- 3-5 sentences: what changed, which entry points, which configs,
+  which tests/checks passed. Pointer-length, not exhaustive.
 - **Commits** -- the short hashes and subjects for that session's commits.
+
+## What goes in an `experiment/<id>.md` file
+
+Same frontmatter and per-session shape, adapted to a run instead of a code change:
+
+- **Prompts** -- the experiment requests the human gave that session, verbatim or
+  lightly trimmed.
+- **Hypothesis** -- the human's general-form hypothesis for the run, kept verbatim
+  rather than sharpened or reworded.
+- **What was run** -- the config(s) used, entry points invoked, and where the run
+  landed (`experiments/results/.../<id>/`, repo-relative).
+- **Commits** -- the short hashes and subjects for that session's commits (typically
+  the experiment config).
+
+Actual results and any assessment of them are deliberately out of scope for this
+file -- it records that the run happened and why, not how it turned out.
 
 ## Workflow
 
-`/devlog <id>` at the end of a `/develop` session does all of it: writes or appends
-this file, commits the session's implementation code, records the commit hashes here
-and in the private note, then commits this file on its own
-(`devlog: <id> session <date>`). Because that is a trailing commit, every hash it
-lists already exists and it does not list itself.
+Two project skills, checked into `.claude/skills/`, write these files:
+
+- `/developlog <id>` -- run at the end of a build session. Writes or appends
+  `devlog/develop/<id>.md`, commits the session's implementation code, records the
+  commit hash(es) here, then commits this file on its own
+  (`devlog: <id> session <date>`).
+- `/experimentlog <id>` -- run at the end of an experiment session, or once a
+  submitted job has finished. Commits the experiment config if it isn't already
+  committed, writes or appends `devlog/experiment/<id>.md`, then commits this file
+  on its own (`explog: <id> session <date>`).
+
+Both are trailing commits: every hash a devlog/explog commit lists already exists,
+and it never lists itself.
 
 ## This is a public file
 
 Same review bar as a commit message. No secrets or API keys, no absolute cluster
-paths (repo-relative only), no unpublished-result specifics. No session id. If a
-prompt contained something that shouldn't be public, paraphrase it and say so.
+paths (repo-relative only), no unpublished-result specifics, no session identifiers
+from any contributor's local tooling. If a prompt contained something that shouldn't
+be public, paraphrase it and say so.

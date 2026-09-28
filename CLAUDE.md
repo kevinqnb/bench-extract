@@ -17,13 +17,9 @@ hardcoded in runner code. Every run writes `run.json` (manifest), a verbatim
 `config.snapshot.yaml`, flat-scalar `metrics.json`, and `log.txt` under
 `experiments/results/{benchmark,training}/<id>/` (gitignored).
 
-`devlog/` holds a curated, public record of AI-assisted work on this repo --
-see `devlog/README.md`.
-
-(If you develop this repo through Kevin's personal Claude Code harness --
-`notes/hub/conventions.md`, the `/develop`/`/devlog`/`/experiment`/`/explog`/
-`/debrief` commands -- see `CLAUDE.local.md`, which is gitignored and specific
-to that setup.)
+`devlog/` holds a curated, public record of AI-assisted work on this repo, written by
+the `/developlog` and `/experimentlog` project skills (`.claude/skills/`) -- see
+`devlog/README.md`.
 
 ## Data
 
