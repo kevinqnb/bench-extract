@@ -1,5 +1,5 @@
 [project]
-name = "route-extract"
+name = "bench-extract"
 version = "0.1.0"
 description = "Benchmarking routing/cascade/scheduling strategies for information extraction over VRDU."
 readme = "README.md"
@@ -10,14 +10,14 @@ dependencies = [
     "python-dotenv>=1.0",
     "pandas>=2.2",
     "httpx>=0.27",
-    # Used by route_extract.datasets.matching (edit-distance matching, ported
+    # Used by bench_extract.datasets.matching (edit-distance matching, ported
     # from VRDU's official evaluator) -- core, not experiments-only.
     "rapidfuzz>=3.0",
 ]
 
 [project.optional-dependencies]
 # Tooling for experiments/{run_benchmark,run_training}.py and tests. Not
-# required by route_extract itself.
+# required by bench_extract itself.
 experiments = [
     "pytest>=8.0",
     "matplotlib>=3.9",
@@ -31,7 +31,7 @@ experiments = [
 # The seven routing/cascade/scheduling methods' upstream repos (LLMRouter,
 # FrugalGPT, BARGAIN, task-cascades, palimpzest, Doctopus, cascade-routing)
 # pin conflicting torch/transformers versions. As each adapter in
-# src/route_extract/extractors/ is actually wired in (see each file's
+# src/bench_extract/extractors/ is actually wired in (see each file's
 # docstring), add it here as its own optional-dependency extra
 # (e.g. `hybridllm = [...]`), isolated from the others -- mirroring
 # govscape-extract's GLiNER2/vllm isolation. None are added yet.
@@ -41,7 +41,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/route_extract"]
+packages = ["src/bench_extract"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]

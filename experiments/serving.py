@@ -10,7 +10,7 @@ else already started) is resolved from `base_url_env` instead.
 vLLM itself is intentionally NOT a dependency of this project (see the note
 in pyproject.toml) -- this module only ever shells out to a `vllm` CLI that
 must already be on PATH (e.g. `uv tool install vllm` into its own
-environment), or to $ROUTE_EXTRACT_VLLM_COMMAND if set (e.g. a
+environment), or to $BENCH_EXTRACT_VLLM_COMMAND if set (e.g. a
 Singularity/container wrapper).
 """
 
@@ -40,7 +40,7 @@ ENDPOINTS_FILE = Path(__file__).resolve().parent / ".endpoints.json"
 
 
 def resolve_vllm_command(override: Optional[str] = None) -> list[str]:
-    command_str = override or os.environ.get("ROUTE_EXTRACT_VLLM_COMMAND") or DEFAULT_VLLM_COMMAND
+    command_str = override or os.environ.get("BENCH_EXTRACT_VLLM_COMMAND") or DEFAULT_VLLM_COMMAND
     return shlex.split(command_str)
 
 

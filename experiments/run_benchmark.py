@@ -1,16 +1,19 @@
 """Config-dispatched runner: accuracy vs. efficiency benchmark for one or
 more extraction strategies (experiments.config.EXTRACTOR_REGISTRY) over a
-VRDU corpus split. This is the "Accuracy vs. Efficiency benchmarking"
-experiment -- see notes/hub/conventions.md for the config envelope and
-run-output contract this follows.
+dataset split (experiments.config.DATASET_REGISTRY). This is the "Accuracy
+vs. Efficiency benchmarking" experiment -- see notes/hub/conventions.md for
+the config envelope and run-output contract this follows.
 
     uv run -m experiments.run_benchmark experiments/experiment-configs/benchmark/<id>.yaml
 
 Expected params:
-    corpus: str              -- experiments/dataset-configs/vrdu.py's CORPORA key
-    split_file: str          -- data/vrdu/few_shot-splits/<corpus>/<split_file>.json;
-                                 its 'train' partition fits each method's profiling
-                                 table, its 'valid' partition is what gets scored
+    dataset: str              -- experiments.config.DATASET_REGISTRY key
+                                  (experiments/dataset-configs/<dataset>.py)
+    dataset_params: dict      -- shape owned by that dataset module; for "vrdu":
+                                    corpus: str      -- dataset-configs/vrdu.py's CORPORA key
+                                    split_file: str  -- data/vrdu/few_shot-splits/<corpus>/<split_file>.json;
+                                                         its 'train' partition fits each method's profiling
+                                                         table, its 'valid' partition is what gets scored
     model_keys: list[str]    -- experiments/model-configs/*.yaml keys forming M
     methods: list[str]       -- experiments.config.EXTRACTOR_REGISTRY keys to compare
     limit: Optional[int]     -- cap documents per partition (debugging)
@@ -36,12 +39,10 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from route_extract.datasets import vrdu
-from route_extract.datasets.vrdu import VRDUDocument, windowed_text
-from route_extract.models.base import OpenAIChatModel
-from route_extract.profiling import build_profiling_table, score_prediction
+from bench_extract.models.base import OpenAIChatModel
+from bench_extract.profiling import build_profiling_table
 
-from experiments.config import EXTRACTOR_REGISTRY, MODEL_REGISTRY, load_dataset_config, load_experiment_config, load_extraction_prompt_template
+from experiments.config import DATASET_REGISTRY, EXTRACTOR_REGISTRY, MODEL_REGISTRY, load_experiment_config
 from experiments.runtime import RunManifest, Tee, git_sha, installed_versions
 from experiments.serving import endpoint_for
 
@@ -51,16 +52,17 @@ RELEVANT_PACKAGES = ["openai", "pandas", "pyyaml", "httpx"]
 
 
 def _profile_models(
-    models: dict[str, OpenAIChatModel], documents: list[VRDUDocument], fields: list[str], max_pages: int, max_chars: int
+    models: dict[str, OpenAIChatModel], documents: list, fields: list[str], windowed_text
 ) -> tuple[dict, dict]:
     """Calls every model on every document once; returns the
-    (run_predictions, timing) dicts build_profiling_table expects."""
+    (run_predictions, timing) dicts build_profiling_table expects.
+    `windowed_text` is a DatasetRunContext.windowed_text: doc -> str."""
     run_predictions: dict[str, dict] = {}
     timing: dict[str, dict] = {}
     for model_key, model in models.items():
         run_predictions[model_key], timing[model_key] = {}, {}
         for doc in documents:
-            text = windowed_text(doc, max_pages=max_pages, max_chars=max_chars)
+            text = windowed_text(doc)
             prediction = model.extract(text, fields)
             run_predictions[model_key][doc.document_id] = prediction.field_values
             timing[model_key][doc.document_id] = dataclasses.asdict(prediction.usage)
@@ -68,28 +70,29 @@ def _profile_models(
     return run_predictions, timing
 
 
-def _resolve_split_docs(doc_ids: list[str], all_docs: dict[str, VRDUDocument], limit: Optional[int], label: str) -> list[VRDUDocument]:
-    """Filters `doc_ids` (from a VRDU split file) to those present in
+def _resolve_split_docs(doc_ids: list[str], all_docs: dict[str, object], limit: Optional[int], label: str) -> list:
+    """Filters `doc_ids` (from a dataset split) to those present in
     `all_docs`, THEN applies `limit` -- filtering after slicing would let
     `--limit` silently return fewer documents than requested whenever the
-    split references ids missing from data.json (e.g. only one corpus was
-    downloaded), instead of surfacing that as a warning.
+    split references ids missing from the loaded dataset (e.g. only one
+    corpus was downloaded), instead of surfacing that as a warning.
     """
     present = [i for i in doc_ids if i in all_docs]
     missing = len(doc_ids) - len(present)
     if missing:
-        print(f"  warning: {missing} {label} document(s) from the split file are not in data.json (corpus not fully downloaded?)")
+        print(f"  warning: {missing} {label} document(s) from the split file are not in the loaded dataset (not fully downloaded?)")
     return [all_docs[i] for i in present[:limit]]
 
 
-def _evaluate_extractor(extractor, documents: list[VRDUDocument], fields: list[str], schema, max_pages: int, max_chars: int) -> dict:
+def _evaluate_extractor(extractor, documents: list, fields: list[str], score_field, windowed_text) -> dict:
+    """`score_field` is a DatasetRunContext.score_field: (predicted, ground_truth, field) -> correct."""
     total_correct, total_fields, total_wall = 0, 0, 0.0
     for doc in documents:
-        text = windowed_text(doc, max_pages=max_pages, max_chars=max_chars)
+        text = windowed_text(doc)
         result = extractor.extract(text, fields)
         total_wall += result.total_wall_seconds
         for f in fields:
-            correct = score_prediction(result.field_values.get(f, []), doc.fields.get(f, []), schema.entity_name_to_match_func[f])
+            correct = score_field(result.field_values.get(f, []), doc.fields.get(f, []), f)
             total_correct += int(correct)
             total_fields += 1
     return {
@@ -109,17 +112,18 @@ def run_benchmark(
 ) -> Optional[Path]:
     config = load_experiment_config(config_path)
     params = config.params
-    corpus, split_file = params["corpus"], params["split_file"]
-    dataset_cfg = load_dataset_config(corpus)
-    schema = vrdu.load_corpus_schema(corpus)
-    fields = sorted(schema.entity_name_to_match_func)
-    prompt_template = load_extraction_prompt_template()
+    dataset = params["dataset"]
+    if dataset not in DATASET_REGISTRY:
+        raise SystemExit(f"Unknown dataset {dataset!r}; choices: {sorted(DATASET_REGISTRY)}")
+    dataset_mod = DATASET_REGISTRY[dataset]
+    dataset_params = params["dataset_params"]
 
-    splits = vrdu.load_split(corpus, split_file)
+    ctx = dataset_mod.load_run_context(dataset_params)
+    prompt_template = dataset_mod.EXTRACTION_PROMPT_TEMPLATE
+
     limit = limit_override if limit_override is not None else params.get("limit")
-    all_docs = {d.document_id: d for d in vrdu.load_documents(corpus)}
-    train_docs = _resolve_split_docs(splits["train"], all_docs, limit, "train")
-    valid_docs = _resolve_split_docs(splits["valid"], all_docs, limit, "valid")
+    train_docs = _resolve_split_docs(dataset_mod.load_split_doc_ids(dataset_params, "train"), ctx.all_docs, limit, "train")
+    valid_docs = _resolve_split_docs(dataset_mod.load_split_doc_ids(dataset_params, "valid"), ctx.all_docs, limit, "valid")
 
     output_root = output_root_override or DEFAULT_OUTPUT_ROOT
     run_dir = output_root / config.id
@@ -131,17 +135,17 @@ def run_benchmark(
     manifest.host = socket.gethostname()
     manifest.job_id = os.environ.get("JOB_ID")  # set by SGE under qsub; None for an interactive run
     manifest.extra = {
-        "corpus": corpus,
-        "split_file": split_file,
+        "dataset": dataset,
+        "dataset_params": dataset_params,
         "n_train": len(train_docs),
         "n_valid": len(valid_docs),
         "methods": params["methods"],
         "model_keys": params["model_keys"],
     }
 
-    print(f"[{config.id}] corpus={corpus} split_file={split_file} n_train={len(train_docs)} n_valid={len(valid_docs)}")
+    print(f"[{config.id}] dataset={dataset} dataset_params={dataset_params} n_train={len(train_docs)} n_valid={len(valid_docs)}")
     if not train_docs or not valid_docs:
-        raise SystemExit(f"No documents found for corpus={corpus!r} split_file={split_file!r} (check data/download_vrdu.py was run).")
+        raise SystemExit(f"No documents found for dataset={dataset!r} dataset_params={dataset_params!r} (check the dataset was downloaded).")
 
     if dry_run:
         print(json.dumps(dataclasses.asdict(manifest), indent=2, default=str))
@@ -178,15 +182,15 @@ def run_benchmark(
                 )
 
             print(f"[{config.id}] profiling {len(models)} model(s) on {len(train_docs)} training document(s)...")
-            run_predictions, timing = _profile_models(models, train_docs, fields, dataset_cfg.max_pages, dataset_cfg.max_chars)
-            profiling_table = build_profiling_table(run_predictions, all_docs, schema, timing)
+            run_predictions, timing = _profile_models(models, train_docs, ctx.fields, ctx.windowed_text)
+            profiling_table = build_profiling_table(run_predictions, ctx.all_docs, ctx.fields, ctx.score_field, timing)
 
             for method in params["methods"]:
                 spec = EXTRACTOR_REGISTRY[method]
                 extractor = spec.extractor_cls(list(models.values()), **method_kwargs.get(method, {}))
                 extractor.fit(profiling_table)
                 print(f"[{config.id}] evaluating {method!r} on {len(valid_docs)} validation document(s)...")
-                result_metrics = _evaluate_extractor(extractor, valid_docs, fields, schema, dataset_cfg.max_pages, dataset_cfg.max_chars)
+                result_metrics = _evaluate_extractor(extractor, valid_docs, ctx.fields, ctx.score_field, ctx.windowed_text)
                 for k, v in result_metrics.items():
                     metrics[f"{method}_{k}"] = v
 

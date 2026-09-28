@@ -15,9 +15,14 @@ package (equivalent Levenshtein distance), to avoid a second fuzzy-matching
 dependency.
 
 These functions define what "correct" means for every routing/cascade/
-scheduling method's training labels (see profiling.py) -- adapted from the
-paper's own evaluator rather than reinvented, so accuracy numbers here stay
-comparable to VRDU's published results at the per-field level.
+scheduling method's training labels -- adapted from the paper's own
+evaluator rather than reinvented, so accuracy numbers here stay comparable to
+VRDU's published results at the per-field level. Consumed only through
+experiments/dataset-configs/vrdu.py's `score_field` (part of the
+DatasetRunContext every dataset module returns, see
+bench_extract.datasets.base) -- the generic evaluation path in
+bench_extract.profiling never imports this module directly, so a
+non-VRDU dataset can define matching however it wants.
 """
 
 from __future__ import annotations
@@ -196,3 +201,12 @@ MATCH_FUNCS: dict[str, type[Match]] = {
     "NameMatch": NameMatch,
     "DefaultMatch": DefaultMatch,
 }
+
+
+def score_prediction(predicted_values: list[str], ground_truth_values: list[str], match_func_name: str) -> bool:
+    """True if any one of `predicted_values` matches any one of
+    `ground_truth_values` under the named match function."""
+    if not predicted_values or not ground_truth_values:
+        return False
+    match_cls = MATCH_FUNCS.get(match_func_name, DefaultMatch)
+    return any(match_cls.match(pred, ground_truth_values) for pred in predicted_values)

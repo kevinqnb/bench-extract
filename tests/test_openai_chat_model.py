@@ -7,7 +7,7 @@ depend on being correct.
 
 from types import SimpleNamespace
 
-from route_extract.models.base import OpenAIChatModel, _loads_lenient
+from bench_extract.models.base import OpenAIChatModel, _loads_lenient
 
 PROMPT_TEMPLATE = "FIELDS: {fields}\nTEXT: {document_text}"
 

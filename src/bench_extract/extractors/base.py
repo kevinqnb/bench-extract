@@ -11,8 +11,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from route_extract.models.base import ExtractionModel
-from route_extract.utils.timing import UsageRecord
+from bench_extract.models.base import ExtractionModel
+from bench_extract.utils.timing import UsageRecord
 
 
 @dataclass

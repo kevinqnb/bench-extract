@@ -4,8 +4,19 @@
       "dataset_name": "DeepForm",
       "entity_name_to_match_func": {
         "advertiser": "GeneralStringMatch",
+        "agency": "GeneralStringMatch",
+        "contract_num": "NumericalStringMatch",
+        "flight_from": "DateMatch",
+        "flight_to": "DateMatch",
         "gross_amount": "PriceMatch",
-        "flight_from": "DateMatch"
+        "product": "GeneralStringMatch",
+        "tv_address": "AddressMatch",
+        "property": "GeneralStringMatch",
+        "channel": "GeneralStringMatch",
+        "program_desc": "GeneralStringMatch",
+        "program_start_date": "DateMatch",
+        "program_end_date": "DateMatch",
+        "sub_amount": "PriceMatch"
       }
     },
     "registration-form": {

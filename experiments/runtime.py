@@ -42,7 +42,7 @@ def installed_versions(packages: list[str]) -> dict[str, Optional[str]]:
 @dataclass
 class RunManifest:
     id: str
-    project: str = "route-extract"
+    project: str = "bench-extract"
     config_path: Optional[str] = None
     git_sha: Optional[str] = None
     git_dirty: Optional[bool] = None

@@ -1,5 +1,5 @@
 id: 2026-09-21-example-benchmark-01
-project: route-extract
+project: bench-extract
 description: >-
   Example accuracy-vs-efficiency benchmark: route/cascade/schedule baselines
   on the ad-buy-form validation split. Only one model_key is configured so far
@@ -8,8 +8,10 @@ description: >-
   gpt-oss-120b's server first: `bash experiments/submit.sh serve gpt-oss-120b`.
 seed: 0
 params:
-  corpus: ad-buy-form
-  split_file: DeepForm-mixed_template-train_10-test_300-valid_100-SD_0
+  dataset: vrdu
+  dataset_params:
+    corpus: ad-buy-form
+    split_file: DeepForm-mixed_template-train_10-test_300-valid_100-SD_0
   model_keys: [gpt-oss-120b]
   methods: [route_baseline, cascade_baseline, schedule_baseline]
   limit: null

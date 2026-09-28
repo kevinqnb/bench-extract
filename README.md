@@ -1,6 +1,6 @@
-# route-extract
+# bench-extract
 
-[![attested by humans](https://github.com/kevinqnb/route-extract/actions/workflows/git-signoff.yml/badge.svg)](https://github.com/kevinqnb/route-extract/actions/workflows/git-signoff.yml)
+[![attested by humans](https://github.com/kevinqnb/bench-extract/actions/workflows/git-signoff.yml/badge.svg)](https://github.com/kevinqnb/bench-extract/actions/workflows/git-signoff.yml)
 
 Benchmarking routing, cascade, and scheduling strategies for information
 extraction -- methods that take a collection of extraction models (LLMs or
@@ -16,7 +16,7 @@ field spans.
 
 - Original dataset: https://github.com/google-research-datasets/vrdu
 - Original evaluator (match functions ported into
-  `src/route_extract/datasets/matching.py`, cited there):
+  `src/bench_extract/datasets/matching.py`, cited there):
   https://github.com/google-research/google-research/tree/master/vrdu
 
 Run `uv run data/download_vrdu.py` to download and reshape it into
@@ -25,7 +25,7 @@ Run `uv run data/download_vrdu.py` to download and reshape it into
 ## Methods
 
 Benchmarks strategies from the following papers, each via its own adapter in
-`src/route_extract/extractors/`:
+`src/bench_extract/extractors/`:
 
 | Type | Method | Paper | Code |
 |---|---|---|---|
@@ -42,6 +42,23 @@ Benchmarks strategies from the following papers, each via its own adapter in
 Every method fits against the same profiling table -- see `CLAUDE.md` for the
 design and current implementation status.
 
-## Development
-* `/devlog` run after a build to log prompt and implementation details to the devlog directory
-* `/signoff` run before opening a PR to audit and verify code with claude before pushing
+## Skills
+
+Project skills in `.claude/skills/`, available to anyone who clones this repo:
+
+- **`/developlog [id]`** -- run after a build/development session, to leave a durable
+  record of what was asked for and what was built: the prompts that drove the
+  session and a pointer-length summary of the implementation, paired with the
+  commit(s) that carry it. Writes `devlog/develop/<id>.md`.
+- **`/experimentlog [id]`** -- run after an experiment session, or once a submitted
+  job finishes, to record what was asked for and what was run: the experiment
+  prompts, the hypothesis behind the run (kept verbatim), and the config/entry point
+  used, paired with the commit that carries the config. Writes
+  `devlog/experiment/<id>.md`.
+- **`/git-signoff`** -- run before opening a PR, to maintain human ownership over the
+  code: a Socratic interview verifying the reviewer actually understands the diff
+  and explicitly accepts its risks and trade-offs, recorded as a signed attestation
+  commit.
+
+See `devlog/README.md` for the devlog/experimentlog file format and
+`.claude/skills/git-signoff/SKILL.md` for the signoff protocol.

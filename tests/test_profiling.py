@@ -1,10 +1,14 @@
-from route_extract.datasets.vrdu import CorpusSchema, VRDUDocument
-from route_extract.profiling import build_profiling_table, score_prediction
+from bench_extract.datasets.matching import score_prediction
+from bench_extract.datasets.vrdu import VRDUDocument
+from bench_extract.profiling import build_profiling_table
 
-SCHEMA = CorpusSchema(
-    dataset_name="TestCorpus",
-    entity_name_to_match_func={"advertiser": "GeneralStringMatch", "gross_amount": "PriceMatch"},
-)
+FIELDS = ["advertiser", "gross_amount"]
+MATCH_FUNC_BY_FIELD = {"advertiser": "GeneralStringMatch", "gross_amount": "PriceMatch"}
+
+
+def score_field(predicted, ground_truth, field):
+    return score_prediction(predicted, ground_truth, MATCH_FUNC_BY_FIELD[field])
+
 
 DOCUMENTS = {
     "doc-1": VRDUDocument(
@@ -24,15 +28,6 @@ DOCUMENTS = {
         fields={"advertiser": ["Widget Inc"], "gross_amount": ["$50.00"]},
     ),
 }
-
-
-def test_score_prediction_correct_and_incorrect():
-    assert score_prediction(["Acme Corp"], ["Acme Corp"], "GeneralStringMatch")
-    assert not score_prediction(["Widget Inc"], ["Acme Corp"], "GeneralStringMatch")
-
-
-def test_score_prediction_empty_prediction_is_incorrect():
-    assert not score_prediction([], ["Acme Corp"], "GeneralStringMatch")
 
 
 def test_build_profiling_table_shape_and_correctness():
@@ -57,7 +52,7 @@ def test_build_profiling_table_shape_and_correctness():
         },
     }
 
-    table = build_profiling_table(run_predictions, DOCUMENTS, SCHEMA, timing)
+    table = build_profiling_table(run_predictions, DOCUMENTS, FIELDS, score_field, timing)
 
     # 2 documents x 2 fields x 2 models = 8 rows.
     assert len(table) == 8

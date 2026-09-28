@@ -3,7 +3,7 @@ key: gpt-oss-120b
 model: openai/gpt-oss-120b
 role: candidate
 serving: external
-base_url_env: ROUTE_EXTRACT_GPT_OSS_120B_BASE_URL
+base_url_env: BENCH_EXTRACT_GPT_OSS_120B_BASE_URL
 hardware:
   device: cuda
   min_vram_gb: 80

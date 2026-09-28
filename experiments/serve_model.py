@@ -1,5 +1,5 @@
 """Starts one model's vLLM server as a standalone, long-running process --
-the "server" half of route-extract's serve/client split.
+the "server" half of bench-extract's serve/client split.
 
 Comparing routing/cascade/scheduling strategies needs several models
 reachable AT THE SAME TIME (M has more than one member), unlike a

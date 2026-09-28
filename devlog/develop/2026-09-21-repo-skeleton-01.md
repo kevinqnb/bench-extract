@@ -1,6 +1,5 @@
 ---
 id: 2026-09-21-repo-skeleton-01
-kind: build
 config:
 ---
 

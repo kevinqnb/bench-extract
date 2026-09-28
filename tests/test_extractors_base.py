@@ -1,11 +1,11 @@
 import pandas as pd
 import pytest
 
-from route_extract.extractors.cascade_extractor import CascadeExtractor
-from route_extract.extractors.route_extractor import RouteExtractor
-from route_extract.extractors.schedule_extractor import ScheduleExtractor
-from route_extract.models.base import ExtractionModel, ExtractionPrediction
-from route_extract.utils.timing import UsageRecord
+from bench_extract.extractors.cascade_extractor import CascadeExtractor
+from bench_extract.extractors.route_extractor import RouteExtractor
+from bench_extract.extractors.schedule_extractor import ScheduleExtractor
+from bench_extract.models.base import ExtractionModel, ExtractionPrediction
+from bench_extract.utils.timing import UsageRecord
 
 
 class FakeModel(ExtractionModel):
