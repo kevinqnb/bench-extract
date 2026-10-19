@@ -124,8 +124,10 @@ experiments/
   model-configs/*.yaml            one file per LLM in M
   dataset-configs/<key>.py        one file per dataset in DATASET_REGISTRY; vrdu.py is the only
                                    one so far (per-corpus windowing + extraction prompt template)
-  experiment-configs/{benchmark,training}/<id>.yaml
+  experiment-configs/{benchmark,training}/<id>.yaml  (benchmark/abacus/: one config per pz policy;
+                                   submit.sh finds a config by id in any subdirectory)
   results/                        gitignored run output
+analysis/abacus.py                time/tokens vs. accuracy + per-model usage plots from finished abacus runs
 tests/                            fixture-based unit tests, see tests/fixtures/vrdu_mini/
 ```
 

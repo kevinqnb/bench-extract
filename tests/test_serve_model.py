@@ -47,3 +47,21 @@ def test_serve_model_accepts_external_cuda_model_and_picks_free_port(monkeypatch
     assert started["model"] == "Qwen/Qwen3-0.6B"
     assert started["served_model_name"] == "qwen3-0.6b-a"
     assert isinstance(started["port"], int) and started["port"] > 0
+
+
+def test_concurrent_endpoint_registration_loses_no_entries(tmp_path, monkeypatch):
+    import multiprocessing
+
+    from experiments import serving
+
+    monkeypatch.setattr(serving, "ENDPOINTS_FILE", tmp_path / ".endpoints.json")
+    keys = [f"model-{i}" for i in range(12)]
+    ctx = multiprocessing.get_context("fork")
+    procs = [ctx.Process(target=serving.write_endpoint, args=(k, f"http://h:{i}/v1")) for i, k in enumerate(keys)]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+    assert set(serving.read_endpoints()) == set(keys)
+    serving.clear_endpoint("model-0")
+    assert "model-0" not in serving.read_endpoints()

@@ -1,0 +1,26 @@
+kind: llm
+key: qwen3.5-0.8b
+model: Qwen/Qwen3.5-0.8B
+served_model_name: qwen3.5-0.8b
+role: candidate
+serving: external
+base_url_env: BENCH_EXTRACT_QWEN3_5_0_8B_BASE_URL
+hardware:
+  device: cuda
+  min_vram_gb: 8
+  gpu_count: 1
+  gpu_compute_capability: "8.0"
+  max_walltime: "12:00:00"
+  notes: Tiny model; any single GPU.
+# --max-model-len: the 3-page OCR window is a few thousand tokens; the checkpoint's native
+# 256K context would otherwise size the KV cache far beyond what this job needs.
+vllm_args: ["--max-model-len", "16384", "--language-model-only"]
+# Thinking off: otherwise the token budget goes to reasoning before the JSON answer.
+extra_body:
+  chat_template_kwargs:
+    enable_thinking: false
+# Headroom for Palimpzest's prompts, which ask for every field (list-valued) in one JSON object.
+max_tokens: 2048
+notes: >-
+  Smallest member of the Qwen3.5 family. Kept as a config but not in any Abacus experiment for now.
+  Qwen3.5 checkpoints are multimodal; --language-model-only skips the vision tower (per the model card's vllm recipe).

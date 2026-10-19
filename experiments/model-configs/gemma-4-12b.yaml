@@ -1,0 +1,28 @@
+kind: llm
+key: gemma-4-12b
+model: google/gemma-4-12B-it
+served_model_name: gemma-4-12b
+role: candidate
+serving: external
+base_url_env: BENCH_EXTRACT_GEMMA_4_12B_BASE_URL
+hardware:
+  device: cuda
+  min_vram_gb: 48
+  gpu_count: 1
+  gpu_compute_capability: "8.0"
+  max_walltime: "24:00:00"
+  notes: ~24GB of bf16 weights plus KV cache; a 48GB-class GPU leaves comfortable headroom.
+# --max-model-len: the 3-page OCR window is a few thousand tokens; the checkpoint's native
+# 256K context would otherwise size the KV cache far beyond what this job needs.
+vllm_args: ["--max-model-len", "16384"]
+# Thinking off: otherwise the token budget goes to reasoning before the JSON answer.
+extra_body:
+  chat_template_kwargs:
+    enable_thinking: false
+# Headroom for Palimpzest's prompts, which ask for every field (list-valued) in one JSON object.
+max_tokens: 2048
+notes: >-
+  Uses the instruction-tuned repo google/gemma-4-12B-it, NOT google/gemma-4-12B: the latter is the
+  pretrained base checkpoint (the -it model's base_model), which does not follow chat/JSON-extraction
+  prompts. Gemma 4's thinking mode is toggled via the chat template's enable_thinking, same kwarg as Qwen.
+  Requires a vLLM release that supports the gemma4_unified architecture.

@@ -226,6 +226,8 @@ data/vrdu/
 experiments/results/
 experiments/out/
 experiments/.endpoints.json
+experiments/.endpoints.lock
+experiments/.endpoints.tmp*
 
 # gitignored per-user cluster submit wrapper (see experiments/README or CLAUDE.md)
 experiments/submit.sh

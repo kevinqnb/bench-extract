@@ -26,6 +26,12 @@ Expected params:
                                 Strategies exposing bind_run_context() also receive
                                 the dataset context + training documents, and their
                                 fit_metrics are written as `<method>_fit_<name>`.
+
+Output (beyond the contract's run.json / config.snapshot.yaml / log.txt):
+    metrics.json          flat scalars per method: accuracy, mean_wall_seconds
+                          (summed call latency), elapsed_seconds (real time for the batch),
+                          mean_prompt_tokens, mean_completion_tokens, model_calls_<model_key>
+    artifacts/steps.csv   one row per model call a method made on a scored document
 """
 
 from __future__ import annotations
@@ -36,8 +42,10 @@ import dataclasses
 import json
 import os
 import shutil
+import csv
 import socket
 import sys
+import time
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
@@ -90,22 +98,54 @@ def _resolve_split_docs(doc_ids: list[str], all_docs: dict[str, object], limit: 
     return [all_docs[i] for i in present[:limit]]
 
 
-def _evaluate_extractor(extractor, documents: list, fields: list[str], score_field, windowed_text) -> dict:
-    """`score_field` is a DatasetRunContext.score_field: (predicted, ground_truth, field) -> correct."""
+STEP_COLUMNS = ["method", "document_id", "model_key", "wall_seconds", "prompt_tokens", "completion_tokens", "accepted"]
+
+
+def _evaluate_extractor(
+    extractor, documents: list, fields: list[str], score_field, windowed_text, step_rows: Optional[list[dict]] = None
+) -> dict:
+    """`score_field` is a DatasetRunContext.score_field: (predicted, ground_truth, field) -> correct.
+    Every model call a strategy made is appended to `step_rows` (one dict per
+    STEP_COLUMNS, minus `method`) when given -- the per-step record the
+    analysis scripts plot from; the returned metrics stay flat scalars."""
     total_correct, total_fields, total_wall = 0, 0, 0.0
+    prompt_tokens, completion_tokens = 0, 0
+    model_calls: dict[str, int] = {}
     # extract_many, not a per-document loop: strategies that execute a whole
     # dataset at once (Abacus) need the batch.
+    started = time.perf_counter()
     results = extractor.extract_many([windowed_text(doc) for doc in documents], fields)
+    elapsed = time.perf_counter() - started
     for doc, result in zip(documents, results):
         total_wall += result.total_wall_seconds
+        for step in result.steps:
+            prompt_tokens += step.usage.prompt_tokens or 0
+            completion_tokens += step.usage.completion_tokens or 0
+            model_calls[step.model_key] = model_calls.get(step.model_key, 0) + 1
+            if step_rows is not None:
+                step_rows.append({
+                    "document_id": doc.document_id,
+                    "model_key": step.model_key,
+                    "wall_seconds": step.usage.wall_seconds,
+                    "prompt_tokens": step.usage.prompt_tokens,
+                    "completion_tokens": step.usage.completion_tokens,
+                    "accepted": step.accepted,
+                })
         for f in fields:
             correct = score_field(result.field_values.get(f, []), doc.fields.get(f, []), f)
             total_correct += int(correct)
             total_fields += 1
+    n_docs = len(documents)
     return {
         "accuracy": total_correct / total_fields if total_fields else 0.0,
-        "mean_wall_seconds": total_wall / len(documents) if documents else 0.0,
-        "n_documents": len(documents),
+        # Summed per-call latency, per document. Strategies that run calls concurrently
+        # (Abacus) finish sooner than this -- see `elapsed_seconds`.
+        "mean_wall_seconds": total_wall / n_docs if n_docs else 0.0,
+        "elapsed_seconds": elapsed,
+        "mean_prompt_tokens": prompt_tokens / n_docs if n_docs else 0.0,
+        "mean_completion_tokens": completion_tokens / n_docs if n_docs else 0.0,
+        "n_documents": n_docs,
+        **{f"model_calls_{key}": n for key, n in model_calls.items()},
     }
 
 
@@ -163,6 +203,7 @@ def run_benchmark(
     method_kwargs: dict[str, dict] = params.get("method_kwargs", {})
 
     metrics: dict[str, float] = {}
+    step_rows: list[dict] = []
     with open(run_dir / "log.txt", "w") as log_fh, contextlib.redirect_stdout(Tee(sys.stdout, log_fh)):
         with ExitStack() as stack:
             models: dict[str, OpenAIChatModel] = {}
@@ -200,11 +241,20 @@ def run_benchmark(
                 for k, v in extractor.fit_metrics.items():
                     metrics[f"{method}_fit_{k}"] = v
                 print(f"[{config.id}] evaluating {method!r} on {len(valid_docs)} validation document(s)...")
-                result_metrics = _evaluate_extractor(extractor, valid_docs, ctx.fields, ctx.score_field, ctx.windowed_text)
+                n_steps_before = len(step_rows)
+                result_metrics = _evaluate_extractor(extractor, valid_docs, ctx.fields, ctx.score_field, ctx.windowed_text, step_rows)
+                for row in step_rows[n_steps_before:]:
+                    row["method"] = method
                 for k, v in result_metrics.items():
                     metrics[f"{method}_{k}"] = v
 
     (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
+    artifacts_dir = run_dir / "artifacts"
+    artifacts_dir.mkdir(exist_ok=True)
+    with open(artifacts_dir / "steps.csv", "w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=STEP_COLUMNS)
+        writer.writeheader()
+        writer.writerows(step_rows)
     manifest.finished_at = datetime.now(timezone.utc).isoformat()
     manifest.status = "success"
     (run_dir / "run.json").write_text(json.dumps(dataclasses.asdict(manifest), indent=2, default=str))

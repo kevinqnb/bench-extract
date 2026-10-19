@@ -1,0 +1,26 @@
+kind: llm
+key: qwen3.5-4b
+model: Qwen/Qwen3.5-4B
+served_model_name: qwen3.5-4b
+role: candidate
+serving: external
+base_url_env: BENCH_EXTRACT_QWEN3_5_4B_BASE_URL
+hardware:
+  device: cuda
+  min_vram_gb: 24
+  gpu_count: 1
+  gpu_compute_capability: "8.0"
+  max_walltime: "12:00:00"
+  notes: ~9GB of bf16 weights plus KV cache; any 24GB+ GPU.
+# --max-model-len: the 3-page OCR window is a few thousand tokens; the checkpoint's native
+# 256K context would otherwise size the KV cache far beyond what this job needs.
+vllm_args: ["--max-model-len", "16384", "--language-model-only"]
+# Thinking off: otherwise the token budget goes to reasoning before the JSON answer.
+extra_body:
+  chat_template_kwargs:
+    enable_thinking: false
+# Headroom for Palimpzest's prompts, which ask for every field (list-valued) in one JSON object.
+max_tokens: 2048
+notes: >-
+  Mid-size member of M. Qwen3.5 checkpoints are multimodal; --language-model-only skips the vision tower
+  (per the model card's vllm recipe). Requires a vLLM release that supports the qwen3_5 architecture.

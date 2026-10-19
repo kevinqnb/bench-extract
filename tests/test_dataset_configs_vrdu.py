@@ -101,3 +101,17 @@ def test_training_split_params_expands_one_dict_per_split_file():
         {"train_size": 10, "seed": 0},
         {"train_size": 50, "seed": 1},
     ]
+
+
+@pytest.mark.parametrize("corpus", sorted(vrdu_dataset.CORPORA))
+def test_field_descriptions_cover_exactly_the_configured_fields(corpus):
+    cfg = vrdu_dataset.CORPORA[corpus]
+    if not cfg.match_func_by_field:
+        pytest.skip(f"{corpus}: field map is still a TODO")
+    assert set(cfg.field_descriptions) == set(cfg.match_func_by_field)
+    assert all(len(d.split()) >= 8 for d in cfg.field_descriptions.values())
+
+
+def test_field_descriptions_mismatch_is_rejected():
+    with pytest.raises(ValueError, match="disagree"):
+        vrdu_dataset.VRDUCorpusConfig(corpus="x", match_func_by_field={"a": "DateMatch"}, field_descriptions={"b": "..."})
