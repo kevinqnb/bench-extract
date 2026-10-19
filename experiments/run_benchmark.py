@@ -20,6 +20,12 @@ Expected params:
     method_kwargs: Optional[dict[str, dict]]  -- extra constructor kwargs per method
                                 name, e.g. {"schedule_baseline": {"min_accuracy": 0.5}}
                                 or {"cascade_baseline": {"model_order": [...]}}
+                                or {"abacus": {"policy": {"name": "MaxQuality"},
+                                "pz_config": {"sample_budget": 5}}} -- see
+                                bench_extract.extractors.abacus for the full set.
+                                Strategies exposing bind_run_context() also receive
+                                the dataset context + training documents, and their
+                                fit_metrics are written as `<method>_fit_<name>`.
 """
 
 from __future__ import annotations
@@ -87,9 +93,10 @@ def _resolve_split_docs(doc_ids: list[str], all_docs: dict[str, object], limit: 
 def _evaluate_extractor(extractor, documents: list, fields: list[str], score_field, windowed_text) -> dict:
     """`score_field` is a DatasetRunContext.score_field: (predicted, ground_truth, field) -> correct."""
     total_correct, total_fields, total_wall = 0, 0, 0.0
-    for doc in documents:
-        text = windowed_text(doc)
-        result = extractor.extract(text, fields)
+    # extract_many, not a per-document loop: strategies that execute a whole
+    # dataset at once (Abacus) need the batch.
+    results = extractor.extract_many([windowed_text(doc) for doc in documents], fields)
+    for doc, result in zip(documents, results):
         total_wall += result.total_wall_seconds
         for f in fields:
             correct = score_field(result.field_values.get(f, []), doc.fields.get(f, []), f)
@@ -171,7 +178,7 @@ def run_benchmark(
                 api_key = os.environ.get(model_config.api_key_env, "EMPTY")
                 models[model_key] = OpenAIChatModel(
                     key=model_key,
-                    model=model_config.model,
+                    model=model_config.served_model_name or model_config.model,
                     prompt_template=prompt_template,
                     base_url=base_url,
                     api_key=api_key,
@@ -188,7 +195,10 @@ def run_benchmark(
             for method in params["methods"]:
                 spec = EXTRACTOR_REGISTRY[method]
                 extractor = spec.extractor_cls(list(models.values()), **method_kwargs.get(method, {}))
+                extractor.bind_run_context(ctx, train_docs)
                 extractor.fit(profiling_table)
+                for k, v in extractor.fit_metrics.items():
+                    metrics[f"{method}_fit_{k}"] = v
                 print(f"[{config.id}] evaluating {method!r} on {len(valid_docs)} validation document(s)...")
                 result_metrics = _evaluate_extractor(extractor, valid_docs, ctx.fields, ctx.score_field, ctx.windowed_text)
                 for k, v in result_metrics.items():

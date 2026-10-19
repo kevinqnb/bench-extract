@@ -15,6 +15,10 @@ traceability, not promised as exact reproduction.
 
 ## Serving
 
+`submit.sh serve` / `serve_model.py` accept any model with `hardware.device: cuda`
+(whatever its `serving` value); a hosted API (`device: none`) is refused. Each serve job
+picks a free port and registers it.
+
 Recommended for any self-hosted model: **`serving: external` + `bash experiments/
 submit.sh serve <model-key>`** (e.g. `gpt-oss-120b.yaml`). `serve_model.py` starts
 that one model's vLLM server as its own standalone, long-running job -- typically
@@ -39,6 +43,13 @@ separate `serve` job. Only use this for a quick single-model run:
 `local_vllm` model_key (it can't size one qsub request for two different GPU
 jobs), and even one ties up a whole GPU allocation for the client job's entire
 runtime, not just the serving portion.
+
+## Several instances of the same weights
+
+`served_model_name` (optional, defaults to `model`) is the name the server advertises
+and clients send as the request's `model`. Give each instance a distinct one (see
+`qwen3-0.6b-a.yaml` / `-b.yaml`) when the same weights appear more than once in M;
+some strategies (Abacus/Palimpzest) key models by that name.
 
 ## Hardware fields
 

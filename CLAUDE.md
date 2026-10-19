@@ -72,9 +72,9 @@ Each base class has a real, working baseline strategy (see its module docstring)
 `RouteExtractor` always routes to the best model on the training profile,
 `CascadeExtractor` escalates through a fixed model order and accepts the first
 non-empty prediction, `ScheduleExtractor` greedily assigns the cheapest model that
-clears an accuracy floor per field. The seven method-specific adapters
+clears an accuracy floor per field. The method-specific adapters
 (`hybridllm.py`, `routellm.py`, `frugalgpt.py`, `bargain.py`, `task_cascade.py`,
-`automix.py`, `abacus.py`, `doctopus.py`) and the unified `cascade_routing.py`
+`automix.py`, `doctopus.py`) and the unified `cascade_routing.py`
 subclass one of these three and currently raise `NotImplementedError` from `fit()`,
 documenting exactly which upstream repo/module wiring them in requires -- see
 `EXTRACTOR_REGISTRY` in `experiments/config.py` for the full method list, including
@@ -111,7 +111,9 @@ src/bench_extract/
   extractors/route_extractor.py    RouteExtractor + working baseline
   extractors/cascade_extractor.py  CascadeExtractor + working baseline
   extractors/schedule_extractor.py ScheduleExtractor + working baseline
-  extractors/{hybridllm,routellm,frugalgpt,bargain,task_cascade,automix,abacus,
+  extractors/abacus.py             AbacusExtractor -- wired to palimpzest (`--extra abacus`)
+  extractors/utils/pz_support.py   all palimpzest imports + version-pinned shims, kept out of core paths
+  extractors/{hybridllm,routellm,frugalgpt,bargain,task_cascade,automix,
               doctopus,cascade_routing}.py   method stubs, see module docstrings
 experiments/
   config.py                       model-configs/dataset-configs loaders, EXTRACTOR_REGISTRY, DATASET_REGISTRY
@@ -131,9 +133,9 @@ tests/                            fixture-based unit tests, see tests/fixtures/v
 
 Skeleton stage: the profiling-table spine, VRDU loading/scoring, the three base
 extractor classes with working baselines, and the config-dispatched runners are
-implemented and unit-tested. None of the seven methods' actual upstream code
-(HybridLLM, RouteLLM, FrugalGPT, BARGAIN, Task Cascades, Automix, Abacus/Palimpzest,
-Doctopus) or the unified cascade-routing paper is wired in yet -- each adapter file
-documents what that requires. No GPU job has been run; `data/download_vrdu.py` has
+implemented and unit-tested. Only Abacus (palimpzest, `abacus.py`) is wired in, verified against a mock/stub LLM;
+none of the others' upstream code (HybridLLM, RouteLLM, FrugalGPT, BARGAIN, Task
+Cascades, Automix, Doctopus) or the unified cascade-routing paper is wired in yet --
+each adapter file documents what that requires. No GPU job has been run; `data/download_vrdu.py` has
 been run for `ad-buy-form` only -- `registration-form` is not yet downloaded in this
 checkout (see `dataset-configs/vrdu.py`'s `CORPORA["registration-form"]` TODO).

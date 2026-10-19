@@ -13,7 +13,7 @@ package) -- see experiments.config.load_dataset_registry.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from bench_extract.datasets import matching, vrdu as vrdu_loader
@@ -31,6 +31,9 @@ class VRDUCorpusConfig:
     match_func_by_field: dict[str, str]
     max_pages: int = 3
     max_chars: int = 9000
+    # field -> one-line description, handed to strategies that prompt per
+    # field (Abacus). TODO: placeholders -- write real descriptions.
+    field_descriptions: dict[str, str] = field(default_factory=dict)
 
 
 CORPORA: dict[str, VRDUCorpusConfig] = {
@@ -131,6 +134,7 @@ def load_run_context(dataset_params: dict, data_root: Path = vrdu_loader.DEFAULT
         all_docs=all_docs,
         windowed_text=lambda doc: vrdu_loader.windowed_text(doc, max_pages=cfg.max_pages, max_chars=cfg.max_chars),
         score_field=score_field,
+        field_descriptions=dict(cfg.field_descriptions),
     )
 
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from bench_extract.datasets.base import DatasetRunContext
 from bench_extract.models.base import ExtractionModel
 from bench_extract.utils.timing import UsageRecord
 
@@ -47,6 +48,14 @@ class MultiModelExtractor(ABC):
             raise ValueError("MultiModelExtractor requires at least one model in M.")
         self.models: dict[str, ExtractionModel] = {m.key: m for m in models}
         self._fitted = False
+        #: Scalar costs of fit() itself (e.g. Abacus's optimization-phase LLM
+        #: calls), reported by the runner separately from inference cost.
+        self.fit_metrics: dict[str, float] = {}
+
+    def bind_run_context(self, ctx: DatasetRunContext, train_docs: list) -> None:
+        """Hands dataset-aware strategies what they need beyond the
+        profiling table (the dataset's fields/scoring and the training
+        documents). Called by the runner before fit(); default no-op."""
 
     @abstractmethod
     def fit(self, profiling_table: pd.DataFrame) -> None:
@@ -60,6 +69,11 @@ class MultiModelExtractor(ABC):
     @abstractmethod
     def extract(self, document_text: str, fields: list[str]) -> ExtractionResult:
         raise NotImplementedError
+
+    def extract_many(self, document_texts: list[str], fields: list[str]) -> list[ExtractionResult]:
+        """Batch form of extract(); strategies that execute a whole dataset
+        at once (Abacus/Palimpzest) override this. Default loops extract()."""
+        return [self.extract(text, fields) for text in document_texts]
 
     def _require_fitted(self) -> None:
         if not self._fitted:

@@ -1,5 +1,9 @@
+import dataclasses
+
 import pytest
 
+from experiments import serve_model as serve_model_module
+from experiments.config import MODEL_REGISTRY
 from experiments.serve_model import serve_model
 
 
@@ -8,8 +12,38 @@ def test_serve_model_refuses_unknown_model_key():
         serve_model("not-a-real-model")
 
 
-def test_serve_model_refuses_non_local_vllm_model():
-    # gpt-oss-120b is serving: external -- serve_model.py is only for
-    # serving: local_vllm models; it should refuse before touching vLLM at all.
-    with pytest.raises(SystemExit):
-        serve_model("gpt-oss-120b")
+def test_serve_model_refuses_model_without_a_gpu(monkeypatch):
+    # A hosted API (hardware.device: none) has nothing to serve; refuse
+    # before touching vLLM at all.
+    hosted = dataclasses.replace(
+        MODEL_REGISTRY["gpt-oss-120b"], hardware=dataclasses.replace(MODEL_REGISTRY["gpt-oss-120b"].hardware, device="none")
+    )
+    monkeypatch.setitem(MODEL_REGISTRY, "hosted-fake", hosted)
+    with pytest.raises(SystemExit, match="hardware.device"):
+        serve_model("hosted-fake")
+
+
+def test_serve_model_accepts_external_cuda_model_and_picks_free_port(monkeypatch):
+    # serving: external + device: cuda is the documented way to serve a model;
+    # stub the server so no vLLM starts, and check what it was asked to launch.
+    started = {}
+
+    class StubServer:
+        base_url = "http://stub:1/v1"
+
+        def __init__(self, **kwargs):
+            started.update(kwargs)
+
+        def start(self):
+            raise KeyboardInterrupt  # stop right after construction
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(serve_model_module, "LocalVLLMServer", StubServer)
+    monkeypatch.setattr(serve_model_module, "resolve_vllm_command", lambda: ["vllm", "serve"])
+    with pytest.raises(KeyboardInterrupt):
+        serve_model("qwen3-0.6b-a")
+    assert started["model"] == "Qwen/Qwen3-0.6B"
+    assert started["served_model_name"] == "qwen3-0.6b-a"
+    assert isinstance(started["port"], int) and started["port"] > 0

@@ -22,6 +22,12 @@ experiments = [
     "pytest>=8.0",
     "matplotlib>=3.9",
 ]
+# Abacus (palimpzest) adapter. Isolated from the other adapters' dependencies
+# (it pulls in torch, chromadb, gradio, ...); pz_support.py pins the 1.5.x
+# private-API shims it relies on.
+abacus = [
+    "palimpzest==1.5.3",
+]
 # NOTE: vllm is deliberately NOT declared as a dependency here. experiments/
 # serving.py's LocalVLLMServer only shells out to a `vllm serve ...`
 # subprocess -- it never imports vllm in-process. Install vllm into its own
@@ -34,7 +40,7 @@ experiments = [
 # src/bench_extract/extractors/ is actually wired in (see each file's
 # docstring), add it here as its own optional-dependency extra
 # (e.g. `hybridllm = [...]`), isolated from the others -- mirroring
-# govscape-extract's GLiNER2/vllm isolation. None are added yet.
+# govscape-extract's GLiNER2/vllm isolation. Only `abacus` is added so far.
 
 [build-system]
 requires = ["hatchling"]

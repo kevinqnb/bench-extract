@@ -1,0 +1,22 @@
+kind: llm
+key: qwen3-0.6b-a
+model: Qwen/Qwen3-0.6B
+served_model_name: qwen3-0.6b-a
+role: candidate
+serving: external
+base_url_env: BENCH_EXTRACT_QWEN3_0_6B_A_BASE_URL
+hardware:
+  device: cuda
+  min_vram_gb: 8
+  gpu_count: 1
+  max_walltime: "04:00:00"
+  notes: Tiny model; any single GPU.
+# Thinking off: Qwen3 otherwise spends the token budget on <think> blocks.
+extra_body:
+  chat_template_kwargs:
+    enable_thinking: false
+notes: >-
+  Smoke-test member of M. qwen3-0.6b-a and qwen3-0.6b-b are the SAME weights served
+  as two separate endpoints (distinct served_model_name), used to exercise
+  multi-model plumbing (e.g. Abacus/Palimpzest's multi-vLLM path) cheaply. They
+  cannot show a quality/cost tradeoff between models.

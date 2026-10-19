@@ -216,7 +216,7 @@ def endpoint_for(
         yield base_url_override, None
         return
     if model_config.serving == "local_vllm":
-        with LocalVLLMServer(model=model_config.model, extra_args=model_config.vllm_args, vllm_command=resolve_vllm_command(), port=port) as server:
+        with LocalVLLMServer(model=model_config.model, served_model_name=model_config.served_model_name, extra_args=model_config.vllm_args, vllm_command=resolve_vllm_command(), port=port) as server:
             yield server.base_url, server.startup_seconds
         return
 

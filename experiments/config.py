@@ -59,7 +59,11 @@ class HardwareRequirement:
 @dataclass(frozen=True)
 class LLMModelConfig:
     key: str
-    model: str  # passed to OpenAIChatModel(model=...) / expected `vllm serve <model>` name
+    model: str  # weights/identifier handed to `vllm serve <model>` (or the hosted API's model name)
+    # Name the server advertises and clients send as the request's `model`.
+    # Defaults to `model`; set it to run several instances of the same
+    # weights as distinct members of M (e.g. Palimpzest keys models by name).
+    served_model_name: Optional[str] = None
     role: Literal["candidate"] = "candidate"
     serving: Literal["local_vllm", "external"] = "external"
     base_url_env: Optional[str] = None
