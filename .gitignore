@@ -224,6 +224,8 @@ data/vrdu/
 
 # Experiment run output (regenerate with experiments/run_{benchmark,training}.py)
 experiments/results/
+# Analysis output (regenerate with analysis/abacus_compare.py)
+analysis/results/
 experiments/out/
 experiments/.endpoints.json
 experiments/.endpoints.lock
