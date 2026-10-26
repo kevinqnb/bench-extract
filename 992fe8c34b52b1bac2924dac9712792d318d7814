@@ -1,0 +1,22 @@
+[SIGNOFF 992fe8c]: human comprehension and risk attestation
+
+Adds two Abacus smoke configs, caps gpt-oss-120b serve walltime at 12h, makes run_job.sh source .env, require HF_HOME, load CUDA and put vLLM's bin on PATH, and re-resolves uv.lock. Standard interview; train/valid partitions are disjoint so limit causes no leakage.
+
+Signoff-Spec-Version: 1.0
+Signoff-Status: VERIFIED_BY_HUMAN
+Signoff-Timestamp: 2026-10-26T03:55:14Z
+Signoff-Base-SHA: 6b695f66700cab7adc0d16fb3243c5893dc3d00a
+Signoff-Reviewed-Commit-SHA: 992fe8c34b52b1bac2924dac9712792d318d7814
+Signoff-Reviewed-Tree-SHA: f0d02363cd4bf53169f560f64f7e4df8e4d57798
+Signoff-Harness-ID: claude-code
+Signoff-Conversation-ID: 9e130bd1-fbaf-4b5a-8b49-f974ef3fecf0
+Signoff-Transcript-Digest: sha256:556d4cbbe9a28817a3c328c86ccd864f6b4d32446737a57edfc383c1bf24f7e5
+Signoff-Transcript-Bytes: 574664
+Signoff-Tradeoff: 2-model smoke config (limit 10, sample_budget 10) is a pipeline sanity check only; yields no usable accuracy/cost estimates; gpt-oss-120b excluded from it
+Signoff-Tradeoff: gpt-oss-120b serve walltime cut from 24h to 12h
+Signoff-Tradeoff: run_job.sh hard-fails without HF_HOME in untracked .env, by design to keep weights off $HOME
+Signoff-Risk: A dead/broken model endpoint (incl. a late FlashInfer/CUDA JIT failure) is swallowed per call in models/base.py: the run completes with empty predictions scored as 0% accuracy; only the profiling table's error column and the log distinguish it from a model returning nothing, and metrics.json does not
+Signoff-Risk: run_job.sh default CUDA module cuda/13.2 is tied to vLLM 0.32.0's cu130 build; a vLLM upgrade changing the CUDA major version may only fail at first sampler use, not at server load
+Signoff-Risk: 2026-10-25-abacus-smoke-2model-01 description says it yields a first rough accuracy/cost read, which the author says is inaccurate to its intent; committed as-is
+Signoff-Verified-By: quinnk@bu.edu
+Signoff-Agent: harness=claude-code/N/A model=claude-sonnet-5-5 reasoning=medium interview=standard/domain-science/sha256:f8508fa3740f
