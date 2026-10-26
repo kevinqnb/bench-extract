@@ -38,7 +38,7 @@ Everything under `data/` is gitignored except `data/README.md` and
 
 An experiment config's `params.dataset` names a key in `experiments/config.py`'s
 `DATASET_REGISTRY`, self-discovered from `experiments/dataset-configs/<key>.py`
-(`vrdu` is the only one so far). `params.dataset_params` is a free-form block whose
+(`vrdu` and `cuad`). `params.dataset_params` is a free-form block whose
 shape is owned by that dataset module, not the runner -- for `vrdu`,
 `{corpus, split_file}` (`run_benchmark.py`) or `{corpus, split_files}`
 (`run_training.py`). Each dataset module implements the `bench_extract.datasets.base` contract
@@ -54,6 +54,9 @@ Likewise, *which fields get extracted* per corpus is declared explicitly in
 `dataset-configs/vrdu.py`'s `CORPORA[corpus].match_func_by_field` -- never inferred
 from whatever `data/vrdu/data.json` (gitignored, regenerable) happens to contain;
 `load_run_context` cross-checks the two and fails loud on disagreement.
+`cuad` (legal contracts, 10 non-yes/no clause-span categories of the 41; `data/download_cuad.py`) takes
+`dataset_params` `{valid_source, valid_size, train_size, seed, max_chars}` and scores
+with a ported `evaluate.py` match rule (`datasets/cuad_matching.py`).
 `registration-form`'s field map is a TODO (not yet downloaded in this checkout).
 
 ## The profiling-table spine

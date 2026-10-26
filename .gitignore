@@ -238,3 +238,6 @@ CLAUDE.local.md
 
 # palimpzest dumps unparseable LLM answers into the cwd
 parse-answer-errors/
+
+# CUAD data -- regenerate with `uv run data/download_cuad.py`
+data/cuad/
