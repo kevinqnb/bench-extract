@@ -16,6 +16,7 @@ Singularity/container wrapper).
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import shlex
@@ -57,16 +58,29 @@ def read_endpoints() -> dict:
         return {}
 
 
+@contextmanager
+def _locked_endpoints() -> Iterator[dict]:
+    """Read-modify-write of ENDPOINTS_FILE under an exclusive flock, written
+    via rename: several serve jobs routinely start (and stop) at the same
+    time and would otherwise overwrite each other's entries."""
+    lock_path = ENDPOINTS_FILE.with_suffix(".lock")
+    with open(lock_path, "w") as lock_fh:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX)
+        endpoints = read_endpoints()
+        yield endpoints
+        tmp = ENDPOINTS_FILE.with_suffix(f".tmp{os.getpid()}")
+        tmp.write_text(json.dumps(endpoints, indent=2))
+        tmp.replace(ENDPOINTS_FILE)
+
+
 def write_endpoint(model_key: str, base_url: str) -> None:
-    endpoints = read_endpoints()
-    endpoints[model_key] = {"base_url": base_url, "updated_at": datetime.now(timezone.utc).isoformat()}
-    ENDPOINTS_FILE.write_text(json.dumps(endpoints, indent=2))
+    with _locked_endpoints() as endpoints:
+        endpoints[model_key] = {"base_url": base_url, "updated_at": datetime.now(timezone.utc).isoformat()}
 
 
 def clear_endpoint(model_key: str) -> None:
-    endpoints = read_endpoints()
-    if endpoints.pop(model_key, None) is not None:
-        ENDPOINTS_FILE.write_text(json.dumps(endpoints, indent=2))
+    with _locked_endpoints() as endpoints:
+        endpoints.pop(model_key, None)
 
 
 def _health_url_from_base(base_url: str) -> str:
@@ -216,7 +230,7 @@ def endpoint_for(
         yield base_url_override, None
         return
     if model_config.serving == "local_vllm":
-        with LocalVLLMServer(model=model_config.model, extra_args=model_config.vllm_args, vllm_command=resolve_vllm_command(), port=port) as server:
+        with LocalVLLMServer(model=model_config.model, served_model_name=model_config.served_model_name, extra_args=model_config.vllm_args, vllm_command=resolve_vllm_command(), port=port) as server:
             yield server.base_url, server.startup_seconds
         return
 

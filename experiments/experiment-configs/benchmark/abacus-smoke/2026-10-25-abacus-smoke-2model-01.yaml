@@ -1,0 +1,24 @@
+id: 2026-10-25-abacus-smoke-2model-01
+project: bench-extract
+description: >-
+  Smoke test of Abacus (MaxQuality) over M = {qwen3.5-4b, gemma-4-12b} -- gpt-oss-120b left out
+  because an 80GB H200 allocation is not expected in reasonable time. Small `limit`/`sample_budget`:
+  checks that both servers are reachable at once and that the serve -> pz optimize -> run ->
+  metrics/steps.csv path works, and yields a first rough accuracy/cost read. Not a final accuracy
+  result. Start both servers first (`bash experiments/submit.sh serve <model-key>`).
+seed: 0
+params:
+  dataset: vrdu
+  dataset_params:
+    corpus: ad-buy-form
+    split_file: DeepForm-mixed_template-train_100-test_300-valid_100-SD_0
+  model_keys: [qwen3.5-4b, gemma-4-12b]
+  methods: [abacus]
+  limit: 10
+  method_kwargs:
+    abacus:
+      policy: {name: MaxQuality}
+      validator: score_field
+      pz_config:
+        seed: 0
+        sample_budget: 10

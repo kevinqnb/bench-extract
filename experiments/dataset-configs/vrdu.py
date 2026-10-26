@@ -13,7 +13,7 @@ package) -- see experiments.config.load_dataset_registry.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from bench_extract.datasets import matching, vrdu as vrdu_loader
@@ -31,6 +31,19 @@ class VRDUCorpusConfig:
     match_func_by_field: dict[str, str]
     max_pages: int = 3
     max_chars: int = 9000
+    # field -> description, handed to strategies that prompt per field
+    # (Abacus). Keys must equal match_func_by_field's (enforced in
+    # __post_init__). Written for a model that has never seen the form: what the
+    # field is, where it sits, and what its value looks like.
+    field_descriptions: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.field_descriptions and set(self.field_descriptions) != set(self.match_func_by_field):
+            raise ValueError(
+                f"{self.corpus}: field_descriptions and match_func_by_field disagree -- "
+                f"missing={sorted(set(self.match_func_by_field) - set(self.field_descriptions))} "
+                f"extra={sorted(set(self.field_descriptions) - set(self.match_func_by_field))}"
+            )
 
 
 CORPORA: dict[str, VRDUCorpusConfig] = {
@@ -54,6 +67,70 @@ CORPORA: dict[str, VRDUCorpusConfig] = {
         },
         max_pages=3,
         max_chars=9000,
+        field_descriptions={
+            "advertiser": (
+                "The political committee, candidate campaign, or organization the ad time is bought for "
+                "(the buyer named on the order, e.g. 'Michael Bloomberg 2020, Inc' or 'Committee to Elect Mike Carr'). "
+                "Not the station and not the media-buying agency."
+            ),
+            "agency": (
+                "The media-buying agency or consultancy that placed the order on the advertiser's behalf "
+                "(e.g. 'Beacon Media -- EDI (5138)'). Often absent when the campaign buys directly; "
+                "return an empty list if no separate agency is named."
+            ),
+            "contract_num": (
+                "The contract / order number that identifies this ad-buy contract, usually labelled "
+                "'Contract', 'Contract #', 'Order No.' or similar near the top of the form. Digits only, e.g. '950658'."
+            ),
+            "flight_from": (
+                "Start date of the whole contract's flight (the overall date range the buy runs), "
+                "usually labelled 'Flight', 'Flight Dates' or 'Start Date'. A date such as '03/27/20'. "
+                "Not the start date of an individual line item."
+            ),
+            "flight_to": (
+                "End date of the whole contract's flight (the overall date range the buy runs), "
+                "usually labelled 'Flight', 'Flight Dates' or 'End Date'. A date such as '03/31/20'. "
+                "Not the end date of an individual line item."
+            ),
+            "gross_amount": (
+                "The total gross dollar amount of the contract, usually labelled 'Total', 'Gross Amount', "
+                "'Total Gross' or 'Gross Total' near the bottom or in a summary box. A price such as '$5,625.00'. "
+                "Not a single line item's amount."
+            ),
+            "product": (
+                "What the ad promotes: the candidate or race, or a ballot issue (e.g. 'Mike Carr for Jackson Co "
+                "States Atty', 'issue'). Often labelled 'Product', 'Estimate' or 'Description' in the header."
+            ),
+            "tv_address": (
+                "The television station's or its billing office's mailing address as printed on the form, "
+                "typically a remit-to / payment address (street or PO box, city, state, ZIP), "
+                "e.g. '4614 Collection Center Drive Chicago, IL 60693'. Include the full multi-line address."
+            ),
+            "property": (
+                "The TV station's call sign or name that the ad runs on (e.g. 'KMSP', 'WXXA', 'WSIL-TV'), "
+                "usually in the form's letterhead or labelled 'Station' / 'Property'."
+            ),
+            "channel": (
+                "The channel identifier of the station for a line item: a channel number or call letters "
+                "(e.g. '9', '3', 'WXXA'), in a 'Channel' / 'Ch.' column of the order lines."
+            ),
+            "program_desc": (
+                "The program, daypart or spot description for a line item: the show or time slot the ad is bought in "
+                "(e.g. 'Fox 9 AM News at 6am', 'Tuesday Prime'). From the description column of the order lines."
+            ),
+            "program_start_date": (
+                "Start date of a single line item / program airing, from the line-item table's start-date or "
+                "'From' column (e.g. '02/17/20'). Distinct from the whole-contract flight dates."
+            ),
+            "program_end_date": (
+                "End date of a single line item / program airing, from the line-item table's end-date or "
+                "'To' column (e.g. '02/23/20'). Distinct from the whole-contract flight dates."
+            ),
+            "sub_amount": (
+                "The dollar amount charged for a single line item (a row of the order table), "
+                "such as '$600.00'. Not the contract's total gross amount."
+            ),
+        },
     ),
     "registration-form": VRDUCorpusConfig(
         corpus="registration-form",
@@ -131,6 +208,7 @@ def load_run_context(dataset_params: dict, data_root: Path = vrdu_loader.DEFAULT
         all_docs=all_docs,
         windowed_text=lambda doc: vrdu_loader.windowed_text(doc, max_pages=cfg.max_pages, max_chars=cfg.max_chars),
         score_field=score_field,
+        field_descriptions=dict(cfg.field_descriptions),
     )
 
 

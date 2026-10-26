@@ -106,7 +106,7 @@ def run_training(
                 api_key = os.environ.get(model_config.api_key_env, "EMPTY")
                 models[model_key] = OpenAIChatModel(
                     key=model_key,
-                    model=model_config.model,
+                    model=model_config.served_model_name or model_config.model,
                     prompt_template=prompt_template,
                     base_url=base_url,
                     api_key=api_key,
@@ -131,9 +131,12 @@ def run_training(
                 for method in params["methods"]:
                     spec = EXTRACTOR_REGISTRY[method]
                     extractor = spec.extractor_cls(list(models.values()), **method_kwargs.get(method, {}))
+                    extractor.bind_run_context(ctx, train_docs)
                     extractor.fit(profiling_table)
                     result_metrics = _evaluate_extractor(extractor, valid_docs, ctx.fields, ctx.score_field, ctx.windowed_text)
                     prefix = f"{method}__{label}"
+                    for k, v in extractor.fit_metrics.items():
+                        metrics[f"{prefix}_fit_{k}"] = v
                     for k, v in result_metrics.items():
                         metrics[f"{prefix}_{k}"] = v
 

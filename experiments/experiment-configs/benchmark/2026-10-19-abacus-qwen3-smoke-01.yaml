@@ -1,0 +1,24 @@
+id: 2026-10-19-abacus-qwen3-smoke-01
+project: bench-extract
+description: >-
+  Smoke test of the Abacus (palimpzest) adapter on VRDU ad-buy-form with two
+  instances of Qwen3-0.6B as M, next to the route/cascade/schedule baselines.
+  Tiny `limit`: this checks plumbing (serve -> pz optimize -> run -> metrics),
+  not accuracy. Start both servers first:
+  `bash experiments/submit.sh serve qwen3-0.6b-a` and `... qwen3-0.6b-b`.
+seed: 0
+params:
+  dataset: vrdu
+  dataset_params:
+    corpus: ad-buy-form
+    split_file: DeepForm-mixed_template-train_10-test_300-valid_100-SD_0
+  model_keys: [qwen3-0.6b-a, qwen3-0.6b-b]
+  methods: [schedule_baseline, abacus]
+  limit: 5
+  method_kwargs:
+    abacus:
+      policy: {name: MaxQuality}
+      validator: score_field
+      pz_config:
+        seed: 0
+        sample_budget: 5

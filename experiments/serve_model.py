@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import signal
+import socket
 import sys
 
 from dotenv import load_dotenv
@@ -33,19 +34,31 @@ from experiments.config import MODEL_REGISTRY, REPO_ROOT
 from experiments.serving import LocalVLLMServer, clear_endpoint, resolve_vllm_command, write_endpoint
 
 
-def serve_model(model_key: str, port: int = 8000) -> None:
+def _free_port() -> int:
+    """A currently-unused port, so several serve jobs landing on one node
+    don't collide on the default."""
+    with socket.socket() as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
+
+def serve_model(model_key: str, port: int | None = None) -> None:
     if model_key not in MODEL_REGISTRY:
         raise SystemExit(f"Unknown model_key {model_key!r}; choices: {sorted(MODEL_REGISTRY)}")
     model_config = MODEL_REGISTRY[model_key]
-    if model_config.serving != "local_vllm":
+    # `external` is the normal mode for a model served here (the client
+    # discovers it via .endpoints.json); what rules a model out is having no
+    # GPU of its own to serve from, i.e. a hosted API (hardware.device: none).
+    if model_config.hardware.device != "cuda":
         raise SystemExit(
-            f"{model_key}: serving={model_config.serving!r}, not 'local_vllm'. "
-            "serve_model.py only starts models configured for local_vllm serving -- "
-            "an 'external' model is either a hosted API or already served by someone else."
+            f"{model_key}: hardware.device={model_config.hardware.device!r}, not 'cuda'. "
+            "serve_model.py only starts GPU-hosted models -- a hosted API has nothing to serve."
         )
 
+    port = port if port is not None else _free_port()
     server = LocalVLLMServer(
         model=model_config.model,
+        served_model_name=model_config.served_model_name,
         port=port,
         extra_args=model_config.vllm_args,
         vllm_command=resolve_vllm_command(),
@@ -74,7 +87,7 @@ def main() -> None:
     load_dotenv(REPO_ROOT / ".env")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model-key", required=True, choices=sorted(MODEL_REGISTRY))
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=None, help="Default: any free port (the endpoint is registered either way)")
     args = parser.parse_args()
     serve_model(args.model_key, port=args.port)
 

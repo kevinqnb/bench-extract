@@ -1,0 +1,24 @@
+id: 2026-10-19-abacus-max-quality-at-fixed-cost-01
+project: bench-extract
+description: >-
+  Abacus (palimpzest) on VRDU ad-buy-form over M = {qwen3.5-4b, gemma-4-12b, gpt-oss-120b} under
+  the MaxQualityAtFixedCost policy. Maximize quality subject to estimated cost <= max_cost (USD). CAVEAT: every vLLM model is priced at $0, so the constraint never binds and this matches max-quality.
+  Only `policy` differs across the experiments in this directory -- split, seed, model_keys and
+  pz_config are identical so the policies are comparable. Start all three servers first:
+  `bash experiments/submit.sh serve qwen3.5-4b`, `... serve gemma-4-12b`, `... serve gpt-oss-120b`.
+seed: 0
+params:
+  dataset: vrdu
+  dataset_params:
+    corpus: ad-buy-form
+    split_file: DeepForm-mixed_template-train_100-test_300-valid_100-SD_0
+  model_keys: [qwen3.5-4b, gemma-4-12b, gpt-oss-120b]
+  methods: [abacus]
+  limit: null
+  method_kwargs:
+    abacus:
+      policy: {name: MaxQualityAtFixedCost, max_cost: 1.0}
+      validator: score_field
+      pz_config:
+        seed: 0
+        sample_budget: 100

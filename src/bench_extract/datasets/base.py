@@ -24,7 +24,7 @@ A dataset module needs:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
@@ -34,3 +34,7 @@ class DatasetRunContext:
     all_docs: dict[str, Any]  # document_id -> Document; must expose .document_id and .fields
     windowed_text: Callable[[Any], str]  # doc -> extraction-window text, windowing already bound
     score_field: Callable[[list[str], list[str], str], bool]  # (predicted, ground_truth, field) -> correct
+    # field -> natural-language description, for strategies that prompt per
+    # field (Abacus/Palimpzest's semantic map); missing fields fall back to
+    # the bare field name.
+    field_descriptions: dict[str, str] = field(default_factory=dict)
