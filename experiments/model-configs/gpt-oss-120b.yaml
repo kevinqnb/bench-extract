@@ -9,7 +9,7 @@ hardware:
   min_vram_gb: 80
   gpu_count: 1
   gpu_compute_capability: "9.0"
-  max_walltime: "24:00:00"
+  max_walltime: "12:00:00"
   notes: >-
     ~120B params / ~5B active MoE; needs 80GB-class VRAM even quantized (A100/H100
     80GB, or multi-GPU tensor-parallel).
