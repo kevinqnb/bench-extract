@@ -100,40 +100,6 @@ serving.py`'s `endpoint_for()` discovers it from there automatically. See
 `experiments/model-configs/README.md`'s "Serving" section for the
 `local_vllm`/`external` distinction and when each applies.
 
-## Layout
-
-```
-data/                            download_vrdu.py + README; everything else gitignored
-src/bench_extract/
-  datasets/base.py                DatasetRunContext -- the dataset-adapter contract
-  datasets/vrdu.py                loads data/vrdu/data.json -> VRDUDocument
-  datasets/matching.py            ported VRDU match functions (source: google-research)
-  models/base.py                  ExtractionModel ABC + OpenAIChatModel
-  profiling.py                    build_profiling_table -- the shared evaluation path
-  extractors/base.py               MultiModelExtractor ABC (+ ExtractionResult/Step)
-  extractors/route_extractor.py    RouteExtractor + working baseline
-  extractors/cascade_extractor.py  CascadeExtractor + working baseline
-  extractors/schedule_extractor.py ScheduleExtractor + working baseline
-  extractors/abacus.py             AbacusExtractor -- wired to palimpzest (`--extra abacus`)
-  extractors/utils/pz_support.py   all palimpzest imports + version-pinned shims, kept out of core paths
-  extractors/{hybridllm,routellm,frugalgpt,bargain,task_cascade,automix,
-              doctopus,cascade_routing}.py   method stubs, see module docstrings
-experiments/
-  config.py                       model-configs/dataset-configs loaders, EXTRACTOR_REGISTRY, DATASET_REGISTRY
-  serving.py                      LocalVLLMServer + endpoint discovery (ported from govscape-extract)
-  serve_model.py                  starts one model's server as its own long-running job
-  run_benchmark.py                 accuracy vs. efficiency runner
-  run_training.py                  training-set-size sweep runner (VRDU's real few_shot-splits)
-  model-configs/*.yaml            one file per LLM in M
-  dataset-configs/<key>.py        one file per dataset in DATASET_REGISTRY; vrdu.py is the only
-                                   one so far (per-corpus windowing + extraction prompt template)
-  experiment-configs/{benchmark,training}/<id>.yaml  (benchmark/abacus/: one config per pz policy;
-                                   submit.sh finds a config by id in any subdirectory)
-  results/                        gitignored run output
-analysis/abacus.py                time/tokens vs. accuracy + per-model usage plots from finished abacus runs
-tests/                            fixture-based unit tests, see tests/fixtures/vrdu_mini/
-```
-
 ## Status
 
 Skeleton stage: the profiling-table spine, VRDU loading/scoring, the three base
