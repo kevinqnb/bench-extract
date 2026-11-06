@@ -28,6 +28,12 @@ experiments = [
 abacus = [
     "palimpzest==1.5.3",
 ]
+# data/download_smithsonian.py only: queries the Smithsonian Open Access
+# search/*.parquet catalogs (file <-> record linkages, ~10M rows). Kept out of
+# the core dependencies so other datasets' users don't need it.
+smithsonian = [
+    "duckdb>=1.1",
+]
 # NOTE: vllm is deliberately NOT declared as a dependency here. experiments/
 # serving.py's LocalVLLMServer only shells out to a `vllm serve ...`
 # subprocess -- it never imports vllm in-process. Install vllm into its own

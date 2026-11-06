@@ -30,9 +30,10 @@ https://github.com/google-research-datasets/vrdu. Original evaluator:
 https://github.com/google-research/google-research/tree/master/vrdu -- its match
 functions are ported (not reinvented) into `src/bench_extract/datasets/matching.py`.
 
-Everything under `data/` is gitignored except `data/README.md` and
-`data/download_vrdu.py`. Run `uv run data/download_vrdu.py` once to populate it. See
-`data/README.md` for the reshaped layout.
+Everything under `data/` is gitignored except `data/README.md` and the
+`data/download_*.py` scripts. Run `uv run data/download_vrdu.py` once to populate it. See
+`data/README.md` for the reshaped layout. `data/download_smithsonian.py` (needs
+`--extra smithsonian`) fetches Smithsonian Open Access records + images and a ground-truth image <-> record join for an entity-linkage task.
 
 ## Choosing a dataset
 
@@ -50,7 +51,7 @@ runners. `load_run_context`'s returned `DatasetRunContext` also carries
 `windowed_text` and `score_field` -- what counts as "correct" for a field (e.g.
 `vrdu`'s fuzzy date/price/string matching, ported into `datasets/matching.py`) is
 each dataset's business too, never assumed by the shared profiling/evaluation code.
-Likewise, *which fields get extracted* per corpus is declared explicitly in
+Likewise, _which fields get extracted_ per corpus is declared explicitly in
 `dataset-configs/vrdu.py`'s `CORPORA[corpus].match_func_by_field` -- never inferred
 from whatever `data/vrdu/data.json` (gitignored, regenerable) happens to contain;
 `load_run_context` cross-checks the two and fails loud on disagreement.
@@ -84,7 +85,7 @@ the three working baselines under `route_baseline`/`cascade_baseline`/
 ## Serving multiple models
 
 A routing/cascade/scheduling comparison needs every model_key in M reachable
-*at the same time*, not served one at a time inside the benchmark job -- so
+_at the same time_, not served one at a time inside the benchmark job -- so
 each self-hosted LLM gets its own standalone server, typically its own
 node/GPU allocation:
 

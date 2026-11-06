@@ -221,6 +221,8 @@ __marimo__/
 
 # VRDU data -- regenerate with `uv run data/download_vrdu.py`
 data/vrdu/
+# Smithsonian Open Access data -- regenerate with `uv run --extra smithsonian data/download_smithsonian.py`
+data/smithsonian/
 
 # Experiment run output (regenerate with experiments/run_{benchmark,training}.py)
 experiments/results/
