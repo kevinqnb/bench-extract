@@ -1,0 +1,24 @@
+[SIGNOFF b176866]: human comprehension and risk attestation
+
+Skeptical interview (20+ probes) over CUAD dataset, scoring, Abacus CUAD configs and analysis; author accepted the listed trade-offs and risks as preliminary-run limitations and plans scoring improvements next PR.
+
+Signoff-Spec-Version: 1.0
+Signoff-Status: VERIFIED_BY_HUMAN
+Signoff-Timestamp: 2026-11-09T13:59:39Z
+Signoff-Base-SHA: 9f1ee9aa9385a8f8eac7c4ae5c9866d06807196f
+Signoff-Reviewed-Commit-SHA: b176866c60ef2b40ce9db6a0e5eb8830e3a2755f
+Signoff-Reviewed-Tree-SHA: 3447d8784611e79f71c716d52fd3121e8f7d2d50
+Signoff-Harness-ID: claude-code
+Signoff-Conversation-ID: f6bd49f2-450a-4222-a96f-0962187e0100
+Signoff-Transcript-Digest: sha256:214d5f72a4d4db26941f2bfb3faf438b4ee90b78fdd00a3f26eac64257f1b157
+Signoff-Transcript-Bytes: 927258
+Signoff-Tradeoff: CUAD scoring is ported verbatim from evaluate.py at a single operating point (not AUPR), including its quirks: split(' ') empty-token, symmetric Jaccard that penalises verbose-but-correct spans, and the Parties substring escape that accepts arbitrarily long predictions; author plans to deviate in a later PR, so scores from these runs are not comparable with a future scorer
+Signoff-Tradeoff: max_chars=30000 window caps late-clause fields (governing_law ~47%, warranty_duration ~55% of spans in-window); absolute accuracy is bounded
+Signoff-Risk: Silent failure: documents whose generation fails (e.g. context overflow, failing qwen calls) are dropped by pz and scored as empty in abacus.py, which is correct for sparse CUAD fields, inflating accuracy and lowering latency/tokens; no dropped-document counter in metrics.json or summary.csv
+Signoff-Risk: Analysis scripts unguarded: reference lines use runs[0] config for all --ids, missing doc ids are skipped silently, window ceiling uses 's in window' and overestimates
+Signoff-Risk: resolve_split: changing valid_size changes both valid set and an unrelated train subsample (non-nested); configs differing only in valid_size are not comparable
+Signoff-Risk: Single seed, 100 contracts, no CIs; LLM nondeterminism, holdout/train draw and per-field multiple comparisons unquantified; Jaccard 0.5 inflates chance matches on long clauses
+Signoff-Risk: Reproducibility: GitHub cuad repo cloned at unpinned HEAD (train/test membership swap not detected), no data hash or code SHA in run.json, CLAUDE.md Status section stale
+Signoff-Risk: run_job.sh exits 1 for CPU-only jobs on nodes lacking the default Python.h path
+Signoff-Verified-By: quinnk@bu.edu
+Signoff-Agent: harness=claude-code/N/A model=claude-sonnet-5-5 reasoning=medium interview=skeptical/domain-science/sha256:f8508fa3740f
