@@ -38,7 +38,7 @@ Everything under `data/` is gitignored except `data/README.md` and
 
 An experiment config's `params.dataset` names a key in `experiments/config.py`'s
 `DATASET_REGISTRY`, self-discovered from `experiments/dataset-configs/<key>.py`
-(`vrdu` is the only one so far). `params.dataset_params` is a free-form block whose
+(`vrdu` and `cuad`). `params.dataset_params` is a free-form block whose
 shape is owned by that dataset module, not the runner -- for `vrdu`,
 `{corpus, split_file}` (`run_benchmark.py`) or `{corpus, split_files}`
 (`run_training.py`). Each dataset module implements the `bench_extract.datasets.base` contract
@@ -54,6 +54,9 @@ Likewise, *which fields get extracted* per corpus is declared explicitly in
 `dataset-configs/vrdu.py`'s `CORPORA[corpus].match_func_by_field` -- never inferred
 from whatever `data/vrdu/data.json` (gitignored, regenerable) happens to contain;
 `load_run_context` cross-checks the two and fails loud on disagreement.
+`cuad` (legal contracts, 10 non-yes/no clause-span categories of the 41; `data/download_cuad.py`) takes
+`dataset_params` `{valid_source, valid_size, train_size, seed, max_chars}` and scores
+with a ported `evaluate.py` match rule (`datasets/cuad_matching.py`).
 `registration-form`'s field map is a TODO (not yet downloaded in this checkout).
 
 ## The profiling-table spine
@@ -96,40 +99,6 @@ endpoint in `experiments/.endpoints.json` (gitignored); `experiments/
 serving.py`'s `endpoint_for()` discovers it from there automatically. See
 `experiments/model-configs/README.md`'s "Serving" section for the
 `local_vllm`/`external` distinction and when each applies.
-
-## Layout
-
-```
-data/                            download_vrdu.py + README; everything else gitignored
-src/bench_extract/
-  datasets/base.py                DatasetRunContext -- the dataset-adapter contract
-  datasets/vrdu.py                loads data/vrdu/data.json -> VRDUDocument
-  datasets/matching.py            ported VRDU match functions (source: google-research)
-  models/base.py                  ExtractionModel ABC + OpenAIChatModel
-  profiling.py                    build_profiling_table -- the shared evaluation path
-  extractors/base.py               MultiModelExtractor ABC (+ ExtractionResult/Step)
-  extractors/route_extractor.py    RouteExtractor + working baseline
-  extractors/cascade_extractor.py  CascadeExtractor + working baseline
-  extractors/schedule_extractor.py ScheduleExtractor + working baseline
-  extractors/abacus.py             AbacusExtractor -- wired to palimpzest (`--extra abacus`)
-  extractors/utils/pz_support.py   all palimpzest imports + version-pinned shims, kept out of core paths
-  extractors/{hybridllm,routellm,frugalgpt,bargain,task_cascade,automix,
-              doctopus,cascade_routing}.py   method stubs, see module docstrings
-experiments/
-  config.py                       model-configs/dataset-configs loaders, EXTRACTOR_REGISTRY, DATASET_REGISTRY
-  serving.py                      LocalVLLMServer + endpoint discovery (ported from govscape-extract)
-  serve_model.py                  starts one model's server as its own long-running job
-  run_benchmark.py                 accuracy vs. efficiency runner
-  run_training.py                  training-set-size sweep runner (VRDU's real few_shot-splits)
-  model-configs/*.yaml            one file per LLM in M
-  dataset-configs/<key>.py        one file per dataset in DATASET_REGISTRY; vrdu.py is the only
-                                   one so far (per-corpus windowing + extraction prompt template)
-  experiment-configs/{benchmark,training}/<id>.yaml  (benchmark/abacus/: one config per pz policy;
-                                   submit.sh finds a config by id in any subdirectory)
-  results/                        gitignored run output
-analysis/abacus.py                time/tokens vs. accuracy + per-model usage plots from finished abacus runs
-tests/                            fixture-based unit tests, see tests/fixtures/vrdu_mini/
-```
 
 ## Status
 

@@ -17,4 +17,9 @@ fi
 module load "${BENCH_EXTRACT_CUDA_MODULE:-cuda/13.2}"
 # ...and ninja, which lives in vLLM's own (uv tool) env and is not on the job's PATH.
 export PATH="$(dirname "$(readlink -f "$(command -v vllm)")"):$PATH"
+# Triton (torch.compile / profile_run) gcc-compiles a small C helper that #includes <Python.h>; the
+# nodes' system python3.12 ships no headers, so point gcc at the cluster module's. Needed whenever
+# vLLM's torch-compile cache misses (it recompiles). Override the path in .env if the module moves.
+export CPATH="${BENCH_EXTRACT_PYTHON_INCLUDE:-/share/pkg.8/python3/3.12.4/install/include/python3.12}${CPATH:+:$CPATH}"
+[ -f "${CPATH%%:*}/Python.h" ] || { echo "run_job.sh: Python.h not found under ${CPATH%%:*}" >&2; exit 1; }
 eval "$JOB_CMD"

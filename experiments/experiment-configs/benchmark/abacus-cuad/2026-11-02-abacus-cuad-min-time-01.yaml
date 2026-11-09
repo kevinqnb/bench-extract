@@ -1,0 +1,28 @@
+id: 2026-11-02-abacus-cuad-min-time-01
+project: bench-extract
+description: >-
+  Abacus (palimpzest) on CUAD (10 non-yes/no clause categories) over M = {qwen3.5-4b, gemma-4-12b, gpt-oss-120b}
+  under the MinTime policy. Mirrors 2026-10-19-abacus-min-time-01 (VRDU); only the dataset differs.
+  Contracts are truncated to the first 30000 characters (max_chars) to fit the 16384-token context of the
+  served models; ~87% of ground-truth spans lie inside that window (governing_law 47%, warranty_duration 55%),
+  so absolute accuracy is capped for late-clause fields. Start all three servers first:
+  `bash experiments/submit.sh serve qwen3.5-4b`, `... serve gemma-4-12b`, `... serve gpt-oss-120b`.
+seed: 0
+params:
+  dataset: cuad
+  dataset_params:
+    valid_source: train
+    valid_size: 100
+    train_size: 100
+    seed: 0
+    max_chars: 30000
+  model_keys: [qwen3.5-4b, gemma-4-12b, gpt-oss-120b]
+  methods: [abacus]
+  limit: null
+  method_kwargs:
+    abacus:
+      policy: {name: MinTime}
+      validator: score_field
+      pz_config:
+        seed: 0
+        sample_budget: 100
