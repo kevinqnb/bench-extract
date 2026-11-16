@@ -34,6 +34,12 @@ abacus = [
 smithsonian = [
     "duckdb>=1.1",
 ]
+# LOTUS adapter (src/bench_extract/linkers/lotus.py). Its numpy<2 and
+# sentence-transformers<4 pins clash with palimpzest's, so it cannot share an
+# environment with `abacus` -- see [tool.uv] conflicts below.
+lotus = [
+    "lotus-ai==1.2.4",
+]
 # NOTE: vllm is deliberately NOT declared as a dependency here. experiments/
 # serving.py's LocalVLLMServer only shells out to a `vllm serve ...`
 # subprocess -- it never imports vllm in-process. Install vllm into its own
@@ -47,6 +53,19 @@ smithsonian = [
 # docstring), add it here as its own optional-dependency extra
 # (e.g. `hybridllm = [...]`), isolated from the others -- mirroring
 # govscape-extract's GLiNER2/vllm isolation. Only `abacus` is added so far.
+
+[tool.uv]
+# Each SQPE runs in its own environment: `uv run --extra abacus ...` or
+# `uv run --extra lotus ...`, never both.
+conflicts = [
+    [
+        { extra = "abacus" },
+        { extra = "lotus" },
+    ],
+]
+constraint-dependencies = [
+    "numpy<2.1",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -1,0 +1,30 @@
+kind: llm
+key: qwen3.5-4b-vision
+model: Qwen/Qwen3.5-4B
+served_model_name: qwen3.5-4b-vision
+role: candidate
+serving: external
+base_url_env: BENCH_EXTRACT_QWEN3_5_4B_VISION_BASE_URL
+hardware:
+  device: cuda
+  min_vram_gb: 24
+  gpu_count: 1
+  gpu_compute_capability: "8.0"
+  max_walltime: "12:00:00"
+  notes: >-
+    ~9GB of bf16 weights plus the vision tower and KV cache; any 24GB+ GPU. Run so far on a DGX
+    Spark (128GB memory shared by CPU and GPU), started directly with serve_model.py.
+vllm_args: [
+  "--max-model-len", "65536",
+  "--reasoning-parser", "qwen3",
+  "--gpu-memory-utilization", "0.5",
+]
+# Thinking on (Qwen3.5's default, stated here so it is not implicit): matching a photograph to a
+# catalog record is a judgment, not a lookup.
+extra_body:
+  chat_template_kwargs:
+    enable_thinking: true
+max_tokens: 16384
+notes: >-
+  qwen3.5-4b's weights served with the vision tower on (no --language-model-only), under its own
+  served name so both can run at once. Used by the Smithsonian image <-> record linkage runs.

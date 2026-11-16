@@ -1,0 +1,26 @@
+id: 2026-11-15-smithsonian-static-01
+project: bench-extract
+description: >-
+  Smithsonian image <-> record linkage on the full sample. A static sem_join of images to full raw
+  record JSON in LOTUS and in palimpzest, each with the same one vision LLM checking every pair. No
+  embedding model, no LOTUS cascade (`cascade_args: null`) and no Abacus optimization (`optimize:
+  false`), so nothing is fit. The methods run one after the other, each in its own environment.
+  Start the server first: `uv run -m experiments.serve_model --model-key qwen3.5-4b-vision`.
+seed: 0
+params:
+  sample_dir: data/smithsonian/samples/per-unit-5_max-jpgs-5_seed-0
+  train_fraction: 0.0  # nothing is fit, so every pair is joined and scored
+  model_keys: [qwen3.5-4b-vision]
+  embedding_model: null
+  join_condition: "{image} is a photograph of the object described by the catalog record {record}"
+  methods: [lotus, abacus]
+  method_kwargs:
+    lotus:
+      cascade_args: null
+      lm_kwargs:
+        max_ctx_len: 65536
+    abacus:
+      optimize: false
+      policy: {name: MaxQuality}
+      pz_config:
+        seed: 0

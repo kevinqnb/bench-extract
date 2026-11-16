@@ -35,6 +35,22 @@ Everything under `data/` is gitignored except `data/README.md` and the
 `data/README.md` for the reshaped layout. `data/download_smithsonian.py` (needs
 `--extra smithsonian`) fetches Smithsonian Open Access records + images and a ground-truth image <-> record join for an entity-linkage task.
 
+## Smithsonian linkage (semantic join)
+
+`experiments/run_smithsonian_benchmark.py` runs the image <-> record join through the SQPEs in its
+`LINKER_REGISTRY` -- `lotus` (`sem_join`) and `abacus` (palimpzest `sem_join`) -- and scores the
+returned pairs against `gold_pairs.csv`. The current configs are static joins: one vision LLM checks
+every pair, with no embedding model (`embedding_model: null`), no LOTUS cascade (`cascade_args: null`)
+and no Abacus optimization (`optimize: false`, `train_fraction: 0.0`). The cascade and the
+optimize-on-a-train-split path stay in the linkers for later runs. It follows
+`run_benchmark.py`'s config envelope and run-output contract but shares none of the VRDU path: joins
+live in `src/bench_extract/linkers/` (`Linker.fit` / `Linker.link`), not `extractors/`. Configs:
+`experiments/experiment-configs/benchmark/smithsonian/`. The `lotus` and `abacus` extras conflict
+(numpy / sentence-transformers pins), so one command,
+`uv run --extra experiments -m experiments.run_smithsonian_benchmark <config>`, starts a child process
+per method in that method's own environment (set in `LINKER_REGISTRY`: `.venv-lotus`, `.venv`), one after
+the other, and merges their outputs; each child's own files land in `<run dir>/<method>/`.
+
 ## Choosing a dataset
 
 An experiment config's `params.dataset` names a key in `experiments/config.py`'s
