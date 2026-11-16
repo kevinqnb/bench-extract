@@ -17,6 +17,13 @@
         "program_start_date": "DateMatch",
         "program_end_date": "DateMatch",
         "sub_amount": "PriceMatch"
+      },
+      "entity_appearance_pattern": {
+        "advertiser": "unrepeated", "agency": "unrepeated", "contract_num": "unrepeated",
+        "flight_from": "unrepeated", "flight_to": "unrepeated", "gross_amount": "unrepeated",
+        "product": "unrepeated", "tv_address": "unrepeated", "property": "unrepeated",
+        "channel": "line_item", "program_desc": "line_item", "program_start_date": "line_item",
+        "program_end_date": "line_item", "sub_amount": "line_item"
       }
     },
     "registration-form": {
@@ -36,8 +43,19 @@
       "fields": {
         "advertiser": ["Acme Corp"],
         "gross_amount": ["$1,250.00"],
-        "flight_from": ["01/02/2024"]
-      }
+        "flight_from": ["01/02/2024"],
+        "channel": ["9", "3"],
+        "sub_amount": ["$600.00", "$650.00"]
+      },
+      "field_entities": {
+        "advertiser": [["Acme Corp"]],
+        "gross_amount": [["$1,250.00"]],
+        "flight_from": [["01/02/2024"]]
+      },
+      "line_items": [
+        {"channel": "9", "sub_amount": "$600.00"},
+        {"channel": "3", "sub_amount": "$650.00"}
+      ]
     },
     "doc-reg-1": {
       "corpus": "registration-form",

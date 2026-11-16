@@ -24,7 +24,9 @@ _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 @dataclass
 class ExtractionPrediction:
-    field_values: dict[str, list[str]]
+    # field -> list of values: strings, or row objects (dicts) for a record
+    # field such as VRDU's `line_items`
+    field_values: dict[str, list]
     usage: UsageRecord
 
 
@@ -88,7 +90,7 @@ class OpenAIChatModel(ExtractionModel):
         prompt = self.prompt_template.format(fields=", ".join(fields), document_text=document_text)
         t0 = time.monotonic()
         error: Optional[str] = None
-        field_values: dict[str, list[str]] = {}
+        field_values: dict[str, list] = {}
         usage_counts: dict[str, Optional[int]] = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
         try:
             kwargs = dict(
@@ -105,7 +107,10 @@ class OpenAIChatModel(ExtractionModel):
             parsed = _loads_lenient(raw)
             for field_name in fields:
                 value = parsed.get(field_name, [])
-                field_values[field_name] = value if isinstance(value, list) else [str(value)]
+                if isinstance(value, list):
+                    field_values[field_name] = value
+                else:  # a lone value / row object
+                    field_values[field_name] = [value if isinstance(value, dict) else str(value)]
             if response.usage:
                 usage_counts = {
                     "prompt_tokens": response.usage.prompt_tokens,

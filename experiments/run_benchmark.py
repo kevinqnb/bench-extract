@@ -17,6 +17,12 @@ Expected params:
     model_keys: list[str]    -- experiments/model-configs/*.yaml keys forming M
     methods: list[str]       -- experiments.config.EXTRACTOR_REGISTRY keys to compare
     limit: Optional[int]     -- cap documents per partition (debugging)
+    scoring: Optional[dict]  -- accuracy measure; absent => the dataset's native one.
+                                {measure: native} or {measure: unified,
+                                match_threshold: float, quantity_decimals: int}
+                                -- see bench_extract.scoring.unified. Drives the
+                                profiling table (every method's fit), the reported
+                                accuracy, and Abacus's validator alike.
     method_kwargs: Optional[dict[str, dict]]  -- extra constructor kwargs per method
                                 name, e.g. {"schedule_baseline": {"min_accuracy": 0.5}}
                                 or {"cascade_baseline": {"model_order": [...]}}
@@ -28,7 +34,9 @@ Expected params:
                                 fit_metrics are written as `<method>_fit_<name>`.
 
 Output (beyond the contract's run.json / config.snapshot.yaml / log.txt):
-    metrics.json          flat scalars per method: accuracy, mean_wall_seconds
+    metrics.json          flat scalars per method: accuracy (mean over scored cells),
+                          n_scored_cells, n_skipped_cells, accuracy_type_<type> (unified
+                          measure only), mean_wall_seconds
                           (summed call latency), elapsed_seconds (real time for the batch),
                           mean_prompt_tokens, mean_completion_tokens, model_calls_<model_key>
     artifacts/steps.csv   one row per model call a method made on a scored document
@@ -101,20 +109,29 @@ def _resolve_split_docs(doc_ids: list[str], all_docs: dict[str, object], limit: 
 STEP_COLUMNS = ["method", "document_id", "model_key", "wall_seconds", "prompt_tokens", "completion_tokens", "accepted"]
 
 
-def _evaluate_extractor(
-    extractor, documents: list, fields: list[str], score_field, windowed_text, step_rows: Optional[list[dict]] = None
-) -> dict:
-    """`score_field` is a DatasetRunContext.score_field: (predicted, ground_truth, field) -> correct.
+def _evaluate_extractor(extractor, documents: list, ctx, step_rows: Optional[list[dict]] = None) -> dict:
+    """Runs `extractor` on `documents` (asking for ctx.fields) and scores every
+    ctx.scored_fields cell with the run's measure (ctx.prediction_for /
+    ctx.ground_truth / ctx.score_field). `accuracy` is the mean score over
+    *scored* cells -- a cell the measure leaves unscored (unified: both sides
+    empty) counts toward neither numerator nor denominator; their number is
+    reported as `n_skipped_cells`. Under the unified measure the mean is also
+    broken down per field type (`accuracy_type_<type>`). `accuracy` is None
+    (JSON null) if no cell was scored.
+
     Every model call a strategy made is appended to `step_rows` (one dict per
     STEP_COLUMNS, minus `method`) when given -- the per-step record the
     analysis scripts plot from; the returned metrics stay flat scalars."""
-    total_correct, total_fields, total_wall = 0, 0, 0.0
+    total_wall = 0.0
     prompt_tokens, completion_tokens = 0, 0
+    n_skipped = 0
+    scores: list[float] = []
+    scores_by_type: dict[str, list[float]] = {}
     model_calls: dict[str, int] = {}
     # extract_many, not a per-document loop: strategies that execute a whole
     # dataset at once (Abacus) need the batch.
     started = time.perf_counter()
-    results = extractor.extract_many([windowed_text(doc) for doc in documents], fields)
+    results = extractor.extract_many([ctx.windowed_text(doc) for doc in documents], ctx.fields)
     elapsed = time.perf_counter() - started
     for doc, result in zip(documents, results):
         total_wall += result.total_wall_seconds
@@ -131,13 +148,21 @@ def _evaluate_extractor(
                     "completion_tokens": step.usage.completion_tokens,
                     "accepted": step.accepted,
                 })
-        for f in fields:
-            correct = score_field(result.field_values.get(f, []), doc.fields.get(f, []), f)
-            total_correct += int(correct)
-            total_fields += 1
+        for f in ctx.scored_fields:
+            score = ctx.score_field(ctx.prediction_for(result.field_values, f), ctx.ground_truth(doc, f), f)
+            if score is None:
+                n_skipped += 1
+                continue
+            scores.append(float(score))
+            if f in ctx.scored_field_types:
+                scores_by_type.setdefault(ctx.scored_field_types[f], []).append(float(score))
     n_docs = len(documents)
+    mean = lambda xs: sum(xs) / len(xs) if xs else None  # noqa: E731
     return {
-        "accuracy": total_correct / total_fields if total_fields else 0.0,
+        "accuracy": mean(scores),
+        "n_scored_cells": len(scores),
+        "n_skipped_cells": n_skipped,
+        **{f"accuracy_type_{t}": mean(xs) for t, xs in sorted(scores_by_type.items())},
         # Summed per-call latency, per document. Strategies that run calls concurrently
         # (Abacus) finish sooner than this -- see `elapsed_seconds`.
         "mean_wall_seconds": total_wall / n_docs if n_docs else 0.0,
@@ -165,7 +190,7 @@ def run_benchmark(
     dataset_mod = DATASET_REGISTRY[dataset]
     dataset_params = params["dataset_params"]
 
-    ctx = dataset_mod.load_run_context(dataset_params)
+    ctx = dataset_mod.load_run_context(dataset_params, scoring=params.get("scoring"))
     prompt_template = dataset_mod.EXTRACTION_PROMPT_TEMPLATE
 
     limit = limit_override if limit_override is not None else params.get("limit")
@@ -188,6 +213,7 @@ def run_benchmark(
         "n_valid": len(valid_docs),
         "methods": params["methods"],
         "model_keys": params["model_keys"],
+        "scoring": params.get("scoring") or {"measure": "native"},
     }
 
     print(f"[{config.id}] dataset={dataset} dataset_params={dataset_params} n_train={len(train_docs)} n_valid={len(valid_docs)}")
@@ -231,7 +257,7 @@ def run_benchmark(
 
             print(f"[{config.id}] profiling {len(models)} model(s) on {len(train_docs)} training document(s)...")
             run_predictions, timing = _profile_models(models, train_docs, ctx.fields, ctx.windowed_text)
-            profiling_table = build_profiling_table(run_predictions, ctx.all_docs, ctx.fields, ctx.score_field, timing)
+            profiling_table = build_profiling_table(run_predictions, ctx, timing)
 
             for method in params["methods"]:
                 spec = EXTRACTOR_REGISTRY[method]
@@ -242,7 +268,7 @@ def run_benchmark(
                     metrics[f"{method}_fit_{k}"] = v
                 print(f"[{config.id}] evaluating {method!r} on {len(valid_docs)} validation document(s)...")
                 n_steps_before = len(step_rows)
-                result_metrics = _evaluate_extractor(extractor, valid_docs, ctx.fields, ctx.score_field, ctx.windowed_text, step_rows)
+                result_metrics = _evaluate_extractor(extractor, valid_docs, ctx, step_rows)
                 for row in step_rows[n_steps_before:]:
                     row["method"] = method
                 for k, v in result_metrics.items():

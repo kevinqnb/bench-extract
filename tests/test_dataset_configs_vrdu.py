@@ -19,11 +19,14 @@ def test_load_run_context_returns_context_for_corpus():
 
 def test_load_run_context_fields_come_from_corpus_config_not_data_json():
     ctx = vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, data_root=FIXTURE_ROOT)
-    # The field list is CORPORA["ad-buy-form"].match_func_by_field, not
-    # whatever this fixture doc happens to have values for (doc-ad-1 only
-    # has 3 of the 14 configured fields).
-    assert ctx.fields == sorted(vrdu_dataset.CORPORA["ad-buy-form"].match_func_by_field)
-    assert len(ctx.fields) == 14
+    # The field list comes from CORPORA["ad-buy-form"], not whatever this
+    # fixture doc happens to have values for: the 9 header fields plus one
+    # line_items field standing in for the 5 line-item sub-fields.
+    cfg = vrdu_dataset.CORPORA["ad-buy-form"]
+    assert ctx.fields == cfg.extraction_fields
+    assert len(ctx.fields) == 10 and ctx.fields[-1] == "line_items"
+    assert not set(cfg.line_item_fields) & set(ctx.fields)
+    assert set(ctx.fields[:-1]) | set(cfg.line_item_fields) == set(cfg.match_func_by_field)
     doc = ctx.all_docs["doc-ad-1"]
     assert doc.fields.get("agency", []) == []  # configured field this doc has no value for
 
@@ -115,3 +118,90 @@ def test_field_descriptions_cover_exactly_the_configured_fields(corpus):
 def test_field_descriptions_mismatch_is_rejected():
     with pytest.raises(ValueError, match="disagree"):
         vrdu_dataset.VRDUCorpusConfig(corpus="x", match_func_by_field={"a": "DateMatch"}, field_descriptions={"b": "..."})
+
+
+UNIFIED = {"measure": "unified", "match_threshold": 0.5, "quantity_decimals": 2}
+
+
+def test_native_is_the_default_and_scores_floats():
+    ctx = vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, data_root=FIXTURE_ROOT)
+    assert ctx.scoring_measure == "native"
+    assert ctx.score_field(["Acme Corp."], ["Acme Corp"], "advertiser") == 1.0
+
+
+def test_native_scores_the_14_entities_and_flattens_line_items():
+    ctx = vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, data_root=FIXTURE_ROOT)
+    cfg = vrdu_dataset.CORPORA["ad-buy-form"]
+    assert ctx.scored_fields == sorted(cfg.match_func_by_field)
+    assert ctx.extraction_field_of["sub_amount"] == "line_items" and ctx.extraction_field_of["advertiser"] == "advertiser"
+    assert ctx.scored_fields_of("line_items") == sorted(cfg.line_item_fields)
+    output = {"line_items": [{"channel": "3", "sub_amount": "$650.00"}, {"channel": "", "sub_amount": "$600.00", "junk": 1}, "bad row"]}
+    assert ctx.prediction_for(output, "channel") == ["3"]  # blank cells dropped, not predicted as ""
+    assert ctx.prediction_for(output, "sub_amount") == ["$650.00", "$600.00"]
+    doc = ctx.all_docs["doc-ad-1"]
+    assert ctx.score_field(ctx.prediction_for(output, "sub_amount"), ctx.ground_truth(doc, "sub_amount"), "sub_amount") == 1.0
+    assert ctx.prediction_for({}, "channel") == []
+
+
+def test_prompt_asks_for_line_items_as_row_objects():
+    cfg = vrdu_dataset.CORPORA["ad-buy-form"]
+    prompt = vrdu_dataset.EXTRACTION_PROMPT_TEMPLATE.format(fields="advertiser, line_items", document_text="X")
+    assert "line_items" in prompt and ", ".join(cfg.line_item_fields) in prompt and '""' in prompt
+    ctx = vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, data_root=FIXTURE_ROOT)
+    assert all(f in ctx.field_descriptions["line_items"] for f in cfg.line_item_fields)
+    assert not set(cfg.line_item_fields) & set(ctx.field_descriptions)
+
+
+def test_line_items_that_differ_from_the_prompt_are_refused(monkeypatch):
+    cfg = vrdu_dataset.CORPORA["ad-buy-form"]
+    monkeypatch.setattr(vrdu_dataset, "PROMPT_LINE_ITEM_FIELDS", list(reversed(cfg.line_item_fields)))
+    with pytest.raises(ValueError, match="EXTRACTION_PROMPT_TEMPLATE"):
+        vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, data_root=FIXTURE_ROOT)
+
+
+def test_unified_scores_line_items_as_one_record_field():
+    ctx = vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, scoring=UNIFIED, data_root=FIXTURE_ROOT)
+    cfg = vrdu_dataset.CORPORA["ad-buy-form"]
+    assert ctx.scoring_measure == "unified"
+    assert ctx.fields == cfg.extraction_fields and ctx.scored_fields == ctx.fields
+    assert ctx.extraction_field_of == {f: f for f in ctx.fields}
+    assert ctx.record_fields == {"line_items": cfg.line_item_fields}
+    assert ctx.scored_field_types["line_items"] == "record" and ctx.scored_field_types["gross_amount"] == "quantity"
+
+    doc = ctx.all_docs["doc-ad-1"]
+    output = {
+        "advertiser": ["ACME CORP"],
+        "gross_amount": ["1250"],
+        "line_items": [{"channel": "3", "sub_amount": "650", "program_desc": ""}, {"channel": 9, "sub_amount": "$600"}],
+    }
+    for f in ("advertiser", "gross_amount", "line_items"):
+        assert ctx.score_field(ctx.prediction_for(output, f), ctx.ground_truth(doc, f), f) == 1.0
+    assert ctx.score_field(ctx.prediction_for(output, "agency"), ctx.ground_truth(doc, "agency"), "agency") is None
+    # rows that don't line up are penalized: the channels swapped across rows
+    swapped = {"line_items": [{"channel": "9", "sub_amount": "650"}, {"channel": "3", "sub_amount": "$600"}]}
+    assert ctx.score_field(ctx.prediction_for(swapped, "line_items"), ctx.ground_truth(doc, "line_items"), "line_items") == 0.5
+
+
+def test_unified_refuses_stale_data_json(tmp_path):
+    data = json.loads((FIXTURE_ROOT / "data.json").read_text())
+    for doc in data["documents"].values():
+        doc.pop("field_entities", None)
+        doc.pop("line_items", None)
+    (tmp_path / "data.json").write_text(json.dumps(data))
+    vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, data_root=tmp_path)  # native still fine
+    with pytest.raises(ValueError, match="download_vrdu"):
+        vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, scoring=UNIFIED, data_root=tmp_path)
+
+
+@pytest.mark.parametrize("scoring", [None, UNIFIED])
+def test_line_item_fields_cross_checked_against_data_json(tmp_path, scoring):
+    data = json.loads((FIXTURE_ROOT / "data.json").read_text())
+    data["corpora"]["ad-buy-form"]["entity_appearance_pattern"]["sub_amount"] = "unrepeated"
+    (tmp_path / "data.json").write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="line_item_fields"):
+        vrdu_dataset.load_run_context({"corpus": "ad-buy-form"}, scoring=scoring, data_root=tmp_path)
+
+
+def test_field_types_mismatch_is_rejected():
+    with pytest.raises(ValueError, match="field_type_by_field"):
+        vrdu_dataset.VRDUCorpusConfig(corpus="x", match_func_by_field={"a": "DateMatch"}, field_type_by_field={"b": "date"})

@@ -29,6 +29,22 @@ Produces:
       data.json                          {"corpora": {...}, "documents": {document_id: {...}}}
                                           -- everything bench_extract.datasets.vrdu reads
 
+Each corpus entry in `data.json` carries `entity_name_to_match_func` and
+`entity_appearance_pattern` (`unrepeated` | `line_item`, from VRDU's meta.json).
+Each document carries its ground truth three ways:
+
+- `fields`: `{field: [text, ...]}`, every annotated appearance flattened. This is what
+  the native VRDU matching scores against.
+- `field_entities`: `{field: [[surface form, ...], ...]}` for unrepeated fields. Each
+  annotation is one entity, and its on-page appearances are alternative spellings.
+- `line_items`: `[{sub_field: text, ...}, ...]`, one record per annotated line-item row.
+  Models are asked for line items in this same shape (one `line_items` field, a list of
+  row objects).
+
+The opt-in unified accuracy measure (`bench_extract.scoring.unified`) reads the last
+two. A `data.json` written before they existed still works for native scoring, but
+the unified measure refuses it; re-run `uv run data/download_vrdu.py --corpus <corpus>`.
+
 `document_id` is the PDF filename's stem (VRDU's own UUID-style filenames), used
 consistently as the join key across `data.json`, `ocr/`, run output, and the
 profiling table.

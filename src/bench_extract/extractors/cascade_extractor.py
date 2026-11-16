@@ -33,7 +33,7 @@ class CascadeExtractor(MultiModelExtractor):
         # reorders/thresholds from measured cost vs. accuracy in the table.
         self._fitted = True
 
-    def should_accept(self, field_values: dict[str, list[str]], fields: list[str]) -> bool:
+    def should_accept(self, field_values: dict[str, list], fields: list[str]) -> bool:
         """Escalate if any requested field is still missing. Subclasses
         override this with the paper's actual acceptance rule."""
         return all(field_values.get(f) for f in fields)
@@ -41,7 +41,7 @@ class CascadeExtractor(MultiModelExtractor):
     def extract(self, document_text: str, fields: list[str]) -> ExtractionResult:
         self._require_fitted()
         steps: list[ExtractionStep] = []
-        field_values: dict[str, list[str]] = {}
+        field_values: dict[str, list] = {}
         for model_key in self._model_order:
             prediction = self.models[model_key].extract(document_text, fields)
             accepted = self.should_accept(prediction.field_values, fields)

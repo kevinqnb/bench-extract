@@ -71,6 +71,7 @@ class AbacusExtractor(ScheduleExtractor):
         self._fields: list[str] = []
 
     def bind_run_context(self, ctx: DatasetRunContext, train_docs: list) -> None:
+        super().bind_run_context(ctx, train_docs)
         self._ctx = ctx
         self._train_docs = train_docs
 
@@ -88,7 +89,8 @@ class AbacusExtractor(ScheduleExtractor):
             {
                 "name": f,
                 "desc": ctx.field_descriptions.get(f, f.replace("_", " ")),
-                "type": list[str],
+                # record fields (VRDU line_items) are lists of row objects
+                "type": list[dict[str, str]] if f in ctx.record_fields else list[str],
             }
             for f in self._fields
         ]
@@ -117,8 +119,10 @@ class AbacusExtractor(ScheduleExtractor):
                 "available_models": pz_models,
             }
         )
-        ground_truth = {d.document_id: d.fields for d in self._train_docs}
-        validator = pzs.resolve_validator_cls(self.validator_name)(ground_truth, ctx.score_field)
+        ground_truth = {d.document_id: {f: ctx.ground_truth(d, f) for f in ctx.scored_fields} for d in self._train_docs}
+        validator = pzs.resolve_validator_cls(self.validator_name)(
+            ground_truth, ctx.score_field, extraction_field_of=ctx.extraction_field_of, prediction_for=ctx.prediction_for
+        )
         train_rows = [
             {pzs.DOCUMENT_ID_COLUMN: d.document_id, pzs.CONTENTS_COLUMN: ctx.windowed_text(d)}
             for d in self._train_docs
@@ -167,7 +171,7 @@ class AbacusExtractor(ScheduleExtractor):
 
         by_doc: dict[str, ExtractionResult] = {}
         for record in records:
-            values = {f: pzs.as_str_list(getattr(record, f, None)) for f in fields}
+            values = {f: pzs.as_value_list(getattr(record, f, None)) for f in fields}
             steps = steps_by_source.get(str(record._source_indices), [])
             by_doc[record.document_id] = ExtractionResult(field_values=values, steps=steps)
         # pz drops a document whose generation failed outright; score it as empty.

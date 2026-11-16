@@ -32,7 +32,7 @@ class ExtractionStep:
 
 @dataclass
 class ExtractionResult:
-    field_values: dict[str, list[str]]
+    field_values: dict[str, list]
     steps: list[ExtractionStep]
 
     @property
@@ -51,11 +51,18 @@ class MultiModelExtractor(ABC):
         #: Scalar costs of fit() itself (e.g. Abacus's optimization-phase LLM
         #: calls), reported by the runner separately from inference cost.
         self.fit_metrics: dict[str, float] = {}
+        #: scored field (profiling-table `field`) -> the extraction field it is
+        #: computed from. Empty = identity. Set from the run context: under the
+        #: native measure VRDU's five line-item sub-field rows all come from the
+        #: one `line_items` extraction field.
+        self.extraction_field_of: dict[str, str] = {}
 
     def bind_run_context(self, ctx: DatasetRunContext, train_docs: list) -> None:
         """Hands dataset-aware strategies what they need beyond the
         profiling table (the dataset's fields/scoring and the training
-        documents). Called by the runner before fit(); default no-op."""
+        documents). Called by the runner before fit(). The base records
+        ctx.extraction_field_of; overrides must call super()."""
+        self.extraction_field_of = dict(ctx.extraction_field_of)
 
     @abstractmethod
     def fit(self, profiling_table: pd.DataFrame) -> None:
@@ -63,7 +70,9 @@ class MultiModelExtractor(ABC):
         (document_id, field, model_key), columns `prediction`,
         `ground_truth`, `correct`, `wall_seconds`, `prompt_tokens`,
         `completion_tokens`, `error` (see profiling.PROFILING_TABLE_COLUMNS).
-        Implementations must set self._fitted = True on success."""
+        `field` is a *scored* field (see self.extraction_field_of) and `correct` a
+        float in [0, 1], NaN for an unscored cell -- aggregate with mean(),
+        which skips NaN. Implementations must set self._fitted = True on success."""
         raise NotImplementedError
 
     @abstractmethod

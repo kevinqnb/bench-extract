@@ -71,23 +71,38 @@ def reshape_corpus(corpus: str, src_root: Path) -> tuple[dict, dict]:
         pages = [list(page["segment"]) for page in rec["ocr"]["pages"]]
 
         # annotations: [[field_name, [[text, bbox, segments], ...]], ...] for an
-        # ordinary field, but for VRDU's "line_item" fields (meta.json's
-        # entity_appearance_pattern, e.g. ad-buy-form's per-row channel/
-        # program_desc/program_start_date/program_end_date) field_name is
-        # instead a *list* of field names and each element of occurrences is
-        # one row: a list of (text, bbox, segments) triples, one per field
-        # name, in matching order (they all repeat together, e.g. one row of
-        # a rate card table). Only the text is kept either way -- bbox/
-        # segments locate the span on the page, which this project's
-        # text-only extraction models never produce.
+        # ordinary ("unrepeated") field -- ONE entity, whose occurrences are
+        # its on-page appearances (alternative surface forms; upstream VRDU
+        # accepts a match against any of them). For VRDU's "line_item" fields
+        # (meta.json's entity_appearance_pattern, e.g. ad-buy-form's channel/
+        # program_desc/program_start_date/program_end_date/sub_amount)
+        # field_name is instead a *list* of the sub-field names present on
+        # that row, and occurrences holds the row: (text, bbox, segments)
+        # triples, one per sub-field name, in matching order. Each such
+        # annotation entry is one line-item record (ad-buy-form: always
+        # exactly one row per entry). Only the text is kept -- bbox/segments
+        # locate the span on the page, which this project's text-only
+        # extraction models never produce.
+        #
+        # Written three ways: `fields` (flat, every appearance -- what the
+        # native VRDU matching scores against), and the grouped
+        # `field_entities` / `line_items` the unified measure
+        # (bench_extract.scoring.unified) scores against.
         fields: dict[str, list[str]] = {}
+        field_entities: dict[str, list[list[str]]] = {}
+        line_items: list[dict[str, str]] = []
         for field_name, occurrences in rec["annotations"]:
             if isinstance(field_name, list):
                 for row in occurrences:
-                    for name, (text, _bbox, _segments) in zip(field_name, row):
+                    record = {}
+                    for name, (text, _bbox, _segments) in zip(field_name, row, strict=True):
                         fields.setdefault(name, []).append(text)
+                        record[name] = text
+                    line_items.append(record)
             else:
-                fields.setdefault(field_name, []).extend(text for text, _bbox, _segments in occurrences)
+                texts = [text for text, _bbox, _segments in occurrences]
+                fields.setdefault(field_name, []).extend(texts)
+                field_entities.setdefault(field_name, []).append(texts)
 
         (ocr_out_dir / f"{document_id}.json").write_text(
             json.dumps({"text": rec["ocr"]["text"], "pages": pages})
@@ -99,11 +114,16 @@ def reshape_corpus(corpus: str, src_root: Path) -> tuple[dict, dict]:
             "ocr_text": rec["ocr"]["text"],
             "pages": pages,
             "fields": fields,
+            "field_entities": field_entities,
+            "line_items": line_items,
         }
 
     schema = {
         "dataset_name": meta["dataset_name"],
         "entity_name_to_match_func": meta["entity_name_to_match_func"],
+        # Read by the unified measure to cross-check which fields form
+        # line-item records (dataset-configs/vrdu.py's line_item_fields).
+        "entity_appearance_pattern": meta.get("entity_appearance_pattern"),
     }
 
     split_src = src_root / corpus / "few_shot-splits"

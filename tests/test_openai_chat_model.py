@@ -75,6 +75,13 @@ def test_extract_coerces_non_list_field_value_to_list():
     assert prediction.field_values == {"advertiser": ["Acme Corp"]}
 
 
+def test_extract_keeps_row_objects_for_record_fields():
+    model, _ = _model_with_fake_client('{"line_items": [{"channel": "9"}], "other": {"channel": "3"}}')
+    prediction = model.extract("text", ["line_items", "other"])
+    # a list of rows passes through; a lone row object is wrapped, not str()-ed
+    assert prediction.field_values == {"line_items": [{"channel": "9"}], "other": [{"channel": "3"}]}
+
+
 def test_extract_records_error_without_raising():
     model, _ = _model_with_fake_client(None, raise_error=RuntimeError("endpoint unreachable"))
     prediction = model.extract("text", ["advertiser"])

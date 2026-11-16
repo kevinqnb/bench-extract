@@ -127,3 +127,47 @@ def test_schedule_extractor_raises_for_unassigned_field():
     extractor.fit(PROFILING_TABLE)
     with pytest.raises(KeyError):
         extractor.extract("text", ["not_a_field"])
+
+
+def test_schedule_extractor_pools_scored_fields_by_extraction_field():
+    from bench_extract.datasets.base import DatasetRunContext
+
+    # native VRDU shape: channel and sub_amount are scored separately but both
+    # come from the one line_items extraction field
+    table = pd.DataFrame(
+        [
+            {"document_id": "d1", "field": "channel", "model_key": "model-cheap", "correct": 1.0, "wall_seconds": 0.5},
+            {"document_id": "d1", "field": "sub_amount", "model_key": "model-cheap", "correct": 0.0, "wall_seconds": 0.5},
+            {"document_id": "d1", "field": "channel", "model_key": "model-expensive", "correct": 1.0, "wall_seconds": 3.0},
+            {"document_id": "d1", "field": "sub_amount", "model_key": "model-expensive", "correct": 1.0, "wall_seconds": 3.0},
+            {"document_id": "d1", "field": "advertiser", "model_key": "model-cheap", "correct": float("nan"), "wall_seconds": 0.5},
+            {"document_id": "d2", "field": "advertiser", "model_key": "model-cheap", "correct": 0.9, "wall_seconds": 0.5},
+            {"document_id": "d1", "field": "advertiser", "model_key": "model-expensive", "correct": 1.0, "wall_seconds": 3.0},
+        ]
+    )
+    ctx = DatasetRunContext(
+        fields=["advertiser", "line_items"],
+        all_docs={},
+        windowed_text=str,
+        score_field=lambda p, g, f: None,
+        scored_fields=["advertiser", "channel", "sub_amount"],
+        extraction_field_of={"advertiser": "advertiser", "channel": "line_items", "sub_amount": "line_items"},
+    )
+    cheap, expensive = FakeModel("model-cheap", {}), FakeModel("model-expensive", {})
+    extractor = ScheduleExtractor([cheap, expensive], min_accuracy=0.8)
+    extractor.bind_run_context(ctx, [])
+    extractor.fit(table)
+    # line_items: cheap's pooled mean is 0.5 < 0.8 -> expensive; advertiser: cheap's
+    # mean skips the NaN cell -> 0.9, cheapest that clears the floor
+    assert extractor._assignment == {"advertiser": "model-cheap", "line_items": "model-expensive"}
+    extractor.extract("doc", ["advertiser", "line_items"])
+
+
+def test_run_context_rejects_a_scored_field_without_a_source():
+    from bench_extract.datasets.base import DatasetRunContext
+
+    with pytest.raises(ValueError, match="extraction_field_of"):
+        DatasetRunContext(
+            fields=["a", "b"], all_docs={}, windowed_text=str, score_field=lambda p, g, f: None,
+            scored_fields=["a"], extraction_field_of={"a": "a"},
+        )

@@ -57,6 +57,42 @@ def test_score_field_validator_averages_per_field_scores():
     assert validator.map_score_fn(["advertiser"], {"document_id": "zzz"}, {"advertiser": ["Acme"]}) is None
 
 
+def test_as_value_list_keeps_row_objects():
+    assert pzs.as_value_list(["a", 3, None, {"channel": "9"}]) == ["a", "3", {"channel": "9"}]
+    assert pzs.as_value_list({"channel": "9"}) == [{"channel": "9"}] and pzs.as_value_list(None) == []
+
+
+def test_score_field_validator_scores_record_fields_and_skips_unscored_cells():
+    vrdu = DATASET_REGISTRY["vrdu"]
+    ctx = vrdu.load_run_context(
+        {"corpus": "ad-buy-form"}, scoring={"measure": "unified", "match_threshold": 0.5, "quantity_decimals": 2}, data_root=FIXTURE_ROOT
+    )
+    doc = ctx.all_docs["doc-ad-1"]
+    gt = {"d1": {f: ctx.ground_truth(doc, f) for f in ctx.scored_fields}}
+    validator = pzs.ScoreFieldValidator(
+        gt, ctx.score_field, extraction_field_of=ctx.extraction_field_of, prediction_for=ctx.prediction_for
+    )
+    record = {"document_id": "d1", "contents": "..."}
+    output = {f: [] for f in ctx.fields} | {"advertiser": ["Acme Corp"], "gross_amount": ["$1,250.00"], "flight_from": ["2024-01-02"]}
+    output["line_items"] = [{"channel": "9", "sub_amount": "$600"}, {"channel": "3", "sub_amount": "$650"}]
+    # every non-empty scored field is right; empty-vs-empty fields are skipped, not counted as 0
+    assert validator.map_score_fn(ctx.fields, record, output) == 1.0
+    assert validator.map_score_fn(["line_items"], record, output) == 1.0
+    assert validator.map_score_fn(["agency"], record, output) is None  # both empty: nothing scored
+
+
+def test_score_field_validator_native_scores_sub_fields_from_line_items():
+    ctx = DATASET_REGISTRY["vrdu"].load_run_context({"corpus": "ad-buy-form"}, data_root=FIXTURE_ROOT)
+    doc = ctx.all_docs["doc-ad-1"]
+    gt = {"d1": {f: ctx.ground_truth(doc, f) for f in ctx.scored_fields}}
+    validator = pzs.ScoreFieldValidator(
+        gt, ctx.score_field, extraction_field_of=ctx.extraction_field_of, prediction_for=ctx.prediction_for
+    )
+    output = {"line_items": [{"channel": "9", "sub_amount": ""}]}
+    # line_items covers 5 scored sub-fields: channel right, the other 4 wrong
+    assert validator.map_score_fn(["line_items"], {"document_id": "d1"}, output) == 0.2
+
+
 def test_resolve_validator_cls_registry_and_dotted_path_and_unknown():
     assert pzs.resolve_validator_cls("score_field") is pzs.ScoreFieldValidator
     assert pzs.resolve_validator_cls("bench_extract.extractors.utils.pz_support:ScoreFieldValidator") is pzs.ScoreFieldValidator
@@ -75,7 +111,12 @@ def test_make_pz_model_routes_to_distinct_endpoints():
     assert a.model_id == "hosted_vllm/t-a" and a.api_base == "http://h:1/v1" and a != b
 
 
-ANSWERS = {"advertiser": ["Acme Corp"], "gross_amount": ["$1,250.00"], "flight_from": ["01/02/2024"]}
+ANSWERS = {
+    "advertiser": ["Acme Corp"],
+    "gross_amount": ["$1,250.00"],
+    "flight_from": ["01/02/2024"],
+    "line_items": [{"channel": "9", "sub_amount": "$600.00"}, {"channel": "3", "sub_amount": "$650.00"}],
+}
 
 
 def _fake_completion(calls, all_fields):
@@ -109,12 +150,14 @@ def test_fit_and_extract_many_end_to_end_with_two_local_models(policy):
         assert {"optimization_seconds", "optimization_cost_usd"} <= set(extractor.fit_metrics)
         assert extractor.fit_metrics["optimization_input_tokens"] > 0 and extractor.fit_metrics["optimization_output_tokens"] > 0
         n_fit_calls = len(calls)
-        results = extractor.extract_many([ctx.windowed_text(base), ctx.windowed_text(base)], ["advertiser", "gross_amount"])
+        results = extractor.extract_many([ctx.windowed_text(base), ctx.windowed_text(base)], ["advertiser", "gross_amount", "line_items"])
     assert n_fit_calls > 0 and len(calls) > n_fit_calls  # optimization sampled, then the plan ran
     assert {api_base for _, api_base in calls} <= {"http://localhost:8000/v1", "http://localhost:8001/v1"}
     assert len(results) == 2
     for result in results:
-        assert result.field_values == {"advertiser": ["Acme Corp"], "gross_amount": ["$1,250.00"]}
+        assert result.field_values["advertiser"] == ["Acme Corp"] and result.field_values["gross_amount"] == ["$1,250.00"]
+        # the record column survives pz's parse as row objects
+        assert result.field_values["line_items"] == ANSWERS["line_items"]
         assert result.steps and all(s.model_key in {"m-a", "m-b"} or s.model_key.startswith("pz:") for s in result.steps)
 
 
@@ -126,13 +169,14 @@ def test_extract_before_fit_and_unknown_field_raise():
         extractor.fit(None)
 
 
-def test_run_uses_the_plan_optimized_on_the_train_split():
+@pytest.mark.parametrize("scoring", [None, {"measure": "unified", "match_threshold": 0.5, "quantity_decimals": 2}])
+def test_run_uses_the_plan_optimized_on_the_train_split(scoring):
     """model a answers correctly, model b answers nothing; after fit under
     MaxQuality (no mixtures/critics, so pz must pick ONE model) every
     run-time step must be model a -- i.e. the quality samples gathered in
     fit() really drive the plan run() executes."""
     vrdu = DATASET_REGISTRY["vrdu"]
-    ctx = vrdu.load_run_context({"corpus": "ad-buy-form"}, data_root=FIXTURE_ROOT)
+    ctx = vrdu.load_run_context({"corpus": "ad-buy-form"}, scoring=scoring, data_root=FIXTURE_ROOT)
     base = ctx.all_docs["doc-ad-1"]
     train_docs = [dataclasses.replace(base, document_id=f"train-{i}") for i in range(4)]
     models = [

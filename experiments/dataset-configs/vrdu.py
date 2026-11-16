@@ -15,9 +15,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 from bench_extract.datasets import matching, vrdu as vrdu_loader
 from bench_extract.datasets.base import DatasetRunContext
+from bench_extract.scoring.unified import NATIVE, ScoringConfig, coerce_records, is_empty, unified_context_kwargs
 
 
 @dataclass(frozen=True)
@@ -34,16 +36,52 @@ class VRDUCorpusConfig:
     # field -> description, handed to strategies that prompt per field
     # (Abacus). Keys must equal match_func_by_field's (enforced in
     # __post_init__). Written for a model that has never seen the form: what the
-    # field is, where it sits, and what its value looks like.
+    # field is, where it sits, and what its value looks like. Line-item
+    # sub-field descriptions are folded into the one `line_item_group`
+    # description (see line_items_description).
     field_descriptions: dict[str, str] = field(default_factory=dict)
+    # Unified measure (bench_extract.scoring.unified): each field's type, keys
+    # equal to match_func_by_field's. Line-item sub-fields keep their own type
+    # inside the record.
+    field_type_by_field: dict[str, str] = field(default_factory=dict)
+    # Fields VRDU annotates as "line_item" rows (meta.json's
+    # entity_appearance_pattern; load_run_context cross-checks it). They are
+    # not extracted one by one: models return one extraction field,
+    # `line_item_group`, as a list of row objects with these keys, so which
+    # values share a row is explicit. The unified measure scores it as records;
+    # the native one flattens it back to per-sub-field lists.
+    line_item_fields: list[str] = field(default_factory=list)
+    line_item_group: str = "line_items"
 
     def __post_init__(self):
-        if self.field_descriptions and set(self.field_descriptions) != set(self.match_func_by_field):
-            raise ValueError(
-                f"{self.corpus}: field_descriptions and match_func_by_field disagree -- "
-                f"missing={sorted(set(self.match_func_by_field) - set(self.field_descriptions))} "
-                f"extra={sorted(set(self.field_descriptions) - set(self.match_func_by_field))}"
-            )
+        for name, mapping in (("field_descriptions", self.field_descriptions), ("field_type_by_field", self.field_type_by_field)):
+            if mapping and set(mapping) != set(self.match_func_by_field):
+                raise ValueError(
+                    f"{self.corpus}: {name} and match_func_by_field disagree -- "
+                    f"missing={sorted(set(self.match_func_by_field) - set(mapping))} "
+                    f"extra={sorted(set(mapping) - set(self.match_func_by_field))}"
+                )
+        if not set(self.line_item_fields) <= set(self.match_func_by_field):
+            raise ValueError(f"{self.corpus}: line_item_fields not in match_func_by_field: {sorted(set(self.line_item_fields) - set(self.match_func_by_field))}")
+        if self.line_item_group in self.match_func_by_field:
+            raise ValueError(f"{self.corpus}: line_item_group {self.line_item_group!r} collides with a field name")
+
+    @property
+    def header_fields(self) -> list[str]:
+        """Fields extracted on their own (everything but the line-item sub-fields)."""
+        return sorted(f for f in self.match_func_by_field if f not in self.line_item_fields)
+
+    @property
+    def extraction_fields(self) -> list[str]:
+        return self.header_fields + ([self.line_item_group] if self.line_item_fields else [])
+
+    def line_items_description(self) -> str:
+        keys = " ".join(f"[{f}] {self.field_descriptions.get(f, f.replace('_', ' '))}" for f in self.line_item_fields)
+        return (
+            "The rows of the form's line-item (order) table, in table order: a list with one JSON object per row, "
+            f'each with exactly the keys {", ".join(self.line_item_fields)} and "" for a cell that is blank in that row. '
+            f"Keys: {keys}"
+        )
 
 
 CORPORA: dict[str, VRDUCorpusConfig] = {
@@ -67,6 +105,23 @@ CORPORA: dict[str, VRDUCorpusConfig] = {
         },
         max_pages=3,
         max_chars=9000,
+        field_type_by_field={
+            "advertiser": "short_text",
+            "agency": "short_text",
+            "contract_num": "identifier",
+            "flight_from": "date",
+            "flight_to": "date",
+            "gross_amount": "quantity",
+            "product": "short_text",
+            "tv_address": "short_text",
+            "property": "identifier",  # call sign, e.g. 'KMSP' -- near-misses are different stations
+            "channel": "identifier",  # '9' vs '3' must not partially match
+            "program_desc": "short_text",
+            "program_start_date": "date",
+            "program_end_date": "date",
+            "sub_amount": "quantity",
+        },
+        line_item_fields=["channel", "program_desc", "program_start_date", "program_end_date", "sub_amount"],
         field_descriptions={
             "advertiser": (
                 "The political committee, candidate campaign, or organization the ad time is bought for "
@@ -146,7 +201,13 @@ CORPORA: dict[str, VRDUCorpusConfig] = {
 }
 
 
-EXTRACTION_PROMPT_TEMPLATE = """You are extracting structured fields from a scanned government form.
+# The line-item keys the prompt names. One template serves every corpus, so
+# load_run_context refuses a corpus whose line_item_fields differ.
+PROMPT_LINE_ITEM_FIELDS: list[str] = list(CORPORA["ad-buy-form"].line_item_fields)
+_PROMPT_LINE_ITEM_GROUP = CORPORA["ad-buy-form"].line_item_group
+
+EXTRACTION_PROMPT_TEMPLATE = (
+    """You are extracting structured fields from a scanned government form.
 
 FIELDS TO EXTRACT: {fields}
 
@@ -158,14 +219,25 @@ DOCUMENT TEXT:
 Return a single JSON object mapping each field name to a list of extracted text \
 value(s) as they literally appear in the document. Use an empty list for a field \
 that is not present. Do not include any other keys."""
+    + f"""
+
+If {_PROMPT_LINE_ITEM_GROUP} is among the fields, its value is instead a list of JSON \
+objects, one per row of the form's line-item (order) table, in table order. Each \
+object has exactly the keys {", ".join(PROMPT_LINE_ITEM_FIELDS)}, with the text as it \
+literally appears in that row, or "" for a cell that is blank in that row."""
+)
 
 
 # e.g. "DeepForm-unk_template-train_100-test_215-valid_100-SD_0" -> (100, 0)
 _SPLIT_NAME_RE = re.compile(r"train_(\d+)-test_\d+-valid_\d+-SD_(\d+)")
 
 
-def load_run_context(dataset_params: dict, data_root: Path = vrdu_loader.DEFAULT_DATA_ROOT) -> DatasetRunContext:
-    """dataset_params: {"corpus": "ad-buy-form" | "registration-form", ...}."""
+def load_run_context(
+    dataset_params: dict, scoring: Optional[dict] = None, data_root: Path = vrdu_loader.DEFAULT_DATA_ROOT
+) -> DatasetRunContext:
+    """dataset_params: {"corpus": "ad-buy-form" | "registration-form", ...}.
+    scoring: the experiment's params.scoring (None => native VRDU matching)."""
+    scoring_config = ScoringConfig.from_params(scoring)
     corpus = dataset_params["corpus"]
     if corpus not in CORPORA:
         raise KeyError(f"Unknown corpus {corpus!r}; choices: {sorted(CORPORA)}")
@@ -198,17 +270,86 @@ def load_run_context(dataset_params: dict, data_root: Path = vrdu_loader.DEFAULT
             f"mismatched_match_func={mismatched}"
         )
 
+    _check_line_items(cfg, schema, data_root)
+
     all_docs = {d.document_id: d for d in vrdu_loader.load_documents(corpus, data_root=data_root)}
-
-    def score_field(predicted: list[str], ground_truth: list[str], field: str) -> bool:
-        return matching.score_prediction(predicted, ground_truth, match_func_by_field[field])
-
-    return DatasetRunContext(
-        fields=sorted(match_func_by_field),
+    group, sub_fields = cfg.line_item_group, list(cfg.line_item_fields)
+    record_fields = {group: sub_fields} if sub_fields else {}
+    descriptions = {f: d for f, d in cfg.field_descriptions.items() if f not in sub_fields}
+    if sub_fields:
+        descriptions[group] = cfg.line_items_description()
+    common = dict(
+        fields=cfg.extraction_fields,
         all_docs=all_docs,
         windowed_text=lambda doc: vrdu_loader.windowed_text(doc, max_pages=cfg.max_pages, max_chars=cfg.max_chars),
-        score_field=score_field,
-        field_descriptions=dict(cfg.field_descriptions),
+        field_descriptions=descriptions,
+        record_fields=record_fields,
+    )
+
+    if scoring_config.measure == NATIVE:
+        # The 14 VRDU entities are scored one by one, as before: each line-item
+        # sub-field's predicted list is that key's non-empty values across the
+        # predicted rows, matched against doc.fields like any other field.
+        def prediction_for(field_values: dict[str, list], scored_field: str) -> list[str]:
+            if scored_field in sub_fields:
+                rows = coerce_records(field_values.get(group), sub_fields)
+                return [r[scored_field] for r in rows if not is_empty(r[scored_field])]
+            return [str(v) for v in (field_values.get(scored_field) or []) if v is not None]
+
+        def score_field(predicted: list[str], ground_truth: list[str], field: str) -> float:
+            return float(matching.score_prediction(predicted, ground_truth, match_func_by_field[field]))
+
+        return DatasetRunContext(
+            score_field=score_field,
+            scored_fields=sorted(match_func_by_field),
+            extraction_field_of={f: (group if f in sub_fields else f) for f in match_func_by_field},
+            prediction_for=prediction_for,
+            **common,
+        )
+
+    return DatasetRunContext(**common, **_unified_kwargs(cfg, all_docs, scoring_config, data_root))
+
+
+def _check_line_items(cfg: VRDUCorpusConfig, schema, data_root: Path) -> None:
+    """The line-item shape models are asked for must match both the prompt
+    and data.json's entity_appearance_pattern."""
+    rerun = f"re-run `uv run data/download_vrdu.py --corpus {cfg.corpus}` to regenerate {data_root}/data.json"
+    if cfg.line_item_fields and (
+        list(cfg.line_item_fields) != PROMPT_LINE_ITEM_FIELDS or cfg.line_item_group != _PROMPT_LINE_ITEM_GROUP
+    ):
+        raise ValueError(
+            f"CORPORA[{cfg.corpus!r}] line items {cfg.line_item_group}={cfg.line_item_fields} differ from the keys "
+            f"EXTRACTION_PROMPT_TEMPLATE names ({_PROMPT_LINE_ITEM_GROUP}={PROMPT_LINE_ITEM_FIELDS}); "
+            "make the template per-corpus first."
+        )
+    if schema.entity_appearance_pattern is None:
+        raise ValueError(f"{data_root}/data.json has no entity_appearance_pattern for {cfg.corpus!r}; {rerun}")
+    data_line_items = sorted(f for f, p in schema.entity_appearance_pattern.items() if p == "line_item")
+    if data_line_items != sorted(cfg.line_item_fields):
+        raise ValueError(
+            f"CORPORA[{cfg.corpus!r}].line_item_fields={sorted(cfg.line_item_fields)} disagrees with "
+            f"data.json's entity_appearance_pattern line_item fields={data_line_items}"
+        )
+
+
+def _unified_kwargs(cfg: VRDUCorpusConfig, all_docs: dict, scoring_config: ScoringConfig, data_root: Path) -> dict:
+    """Unified-measure context pieces; fails loud on anything the grouped
+    ground truth needs but this config / data.json doesn't have."""
+    rerun = f"re-run `uv run data/download_vrdu.py --corpus {cfg.corpus}` to regenerate {data_root}/data.json"
+    if not cfg.field_type_by_field:
+        raise NotImplementedError(f"CORPORA[{cfg.corpus!r}].field_type_by_field is empty -- the unified measure needs every field typed.")
+    stale = [d for d in all_docs.values() if d.field_entities is None or d.line_items is None]
+    if stale:
+        raise ValueError(f"{len(stale)} document(s) lack grouped ground truth (field_entities/line_items); {rerun}")
+
+    record_fields = {cfg.line_item_group: list(cfg.line_item_fields)} if cfg.line_item_fields else {}
+    return unified_context_kwargs(
+        fields=cfg.extraction_fields,
+        field_types=cfg.field_type_by_field,
+        record_fields=record_fields,
+        config=scoring_config,
+        entity_ground_truth=lambda doc, field: doc.field_entities.get(field, []),
+        record_ground_truth=lambda doc, _group: doc.line_items,
     )
 
 

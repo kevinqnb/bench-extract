@@ -401,9 +401,11 @@ dependencies = [
     { name = "openai" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
     { name = "pandas", version = "3.0.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
+    { name = "python-dateutil" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "rapidfuzz" },
+    { name = "scipy" },
 ]
 
 [package.optional-dependencies]
@@ -423,9 +425,11 @@ requires-dist = [
     { name = "palimpzest", marker = "extra == 'abacus'", specifier = "==1.5.3" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pytest", marker = "extra == 'experiments'", specifier = ">=8.0" },
+    { name = "python-dateutil", specifier = ">=2.8" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rapidfuzz", specifier = ">=3.0" },
+    { name = "scipy", specifier = ">=1.11" },
 ]
 provides-extras = ["experiments", "abacus"]
 

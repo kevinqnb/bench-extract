@@ -59,6 +59,33 @@ from whatever `data/vrdu/data.json` (gitignored, regenerable) happens to contain
 with a ported `evaluate.py` match rule (`datasets/cuad_matching.py`).
 `registration-form`'s field map is a TODO (not yet downloaded in this checkout).
 
+## Choosing an accuracy measure
+
+`params.scoring` picks the measure. Leave it out, or set `{measure: native}`, to use
+each dataset's own ported upstream rule. Set
+`{measure: unified, match_threshold, quantity_decimals}` (no code defaults) for the
+cross-dataset measure in `src/bench_extract/scoring/unified.py`:
+
+- Each field is scored by its declared type, from `CORPORA[corpus].field_type_by_field`
+  in `dataset-configs/vrdu.py` or `FIELD_TYPES` in `dataset-configs/cuad.py`:
+  - date, quantity and identifier: exact match after normalization;
+  - short text: Levenshtein similarity;
+  - long text: token F1.
+- Lists are matched one-to-one with Hungarian matching and scored as a soft F1.
+- VRDU line items are scored as whole records (`line_items`).
+- Cells empty on both sides are not scored.
+
+VRDU's line items are always extracted as one field, `line_items`: a list of row
+objects with the five sub-field keys, so which values share a row is explicit.
+The native measure flattens those rows back into per-sub-field lists and scores
+the 14 VRDU fields one by one, as before.
+
+The measure is resolved inside `load_run_context(dataset_params, scoring)`. The
+returned `DatasetRunContext` carries `scored_fields`, `extraction_field_of`,
+`prediction_for` and `ground_truth` alongside `score_field`, so the profiling table,
+the runners' metrics and Abacus's validator always use the same measure. The
+profiling table's `correct` is therefore a float, with NaN for an unscored cell.
+
 ## The profiling-table spine
 
 `RouteExtractor`, `CascadeExtractor`, and `ScheduleExtractor`

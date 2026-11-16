@@ -29,13 +29,24 @@ class VRDUDocument:
     filename: str
     ocr_text: str
     pages: list[tuple[int, int]]  # char [start, end) per page, in reading order
-    fields: dict[str, list[str]]  # field_name -> ground-truth text value(s)
+    fields: dict[str, list[str]]  # field_name -> ground-truth text value(s), flattened (native scoring)
+    # Grouped ground truth for the unified measure (bench_extract.scoring.unified);
+    # None when data.json predates download_vrdu.py writing them -- re-run it.
+    # Non-line-item field -> one list of surface forms per entity (VRDU
+    # annotates every on-page appearance of an unrepeated field as one entity).
+    field_entities: Optional[dict[str, list[list[str]]]] = None
+    # One {sub_field: text} per line-item row; a row only carries the
+    # sub-fields annotated on it.
+    line_items: Optional[list[dict[str, str]]] = None
 
 
 @dataclass(frozen=True)
 class CorpusSchema:
     dataset_name: str
     entity_name_to_match_func: dict[str, str]
+    # field -> "unrepeated" | "line_item" (VRDU meta.json); None for a
+    # data.json written before download_vrdu.py kept it.
+    entity_appearance_pattern: Optional[dict[str, str]] = None
 
 
 def load_dataset(data_root: Path = DEFAULT_DATA_ROOT) -> dict:
@@ -50,7 +61,11 @@ def load_corpus_schema(corpus: str, data_root: Path = DEFAULT_DATA_ROOT) -> Corp
     if corpus not in data["corpora"]:
         raise KeyError(f"Unknown corpus {corpus!r}; choices: {sorted(data['corpora'])}")
     schema = data["corpora"][corpus]
-    return CorpusSchema(dataset_name=schema["dataset_name"], entity_name_to_match_func=schema["entity_name_to_match_func"])
+    return CorpusSchema(
+        dataset_name=schema["dataset_name"],
+        entity_name_to_match_func=schema["entity_name_to_match_func"],
+        entity_appearance_pattern=schema.get("entity_appearance_pattern"),
+    )
 
 
 def load_documents(corpus: Optional[str] = None, data_root: Path = DEFAULT_DATA_ROOT) -> list[VRDUDocument]:
@@ -69,6 +84,8 @@ def load_documents(corpus: Optional[str] = None, data_root: Path = DEFAULT_DATA_
                 ocr_text=rec["ocr_text"],
                 pages=[tuple(p) for p in rec["pages"]],
                 fields=rec["fields"],
+                field_entities=rec.get("field_entities"),
+                line_items=rec.get("line_items"),
             )
         )
     return docs

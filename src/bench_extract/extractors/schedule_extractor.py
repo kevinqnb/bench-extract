@@ -8,6 +8,14 @@ baseline below is a real, if naive, solver: for each field, assign the
 cheapest (lowest mean wall-clock time) model whose training-set accuracy on
 that field clears `min_accuracy` -- falling back to the field's most
 accurate model if none clears the floor.
+
+"Accuracy" here is the mean of the profiling table's `correct` over scored
+cells: a hit rate under a native measure, a mean soft F1 under the unified one
+(bench_extract.scoring.unified) -- so `min_accuracy` means different things
+under the two. Assignment is per *extraction* field: the profiling table's
+scored-field rows are pooled by `extraction_field_of`, so VRDU's `line_items`
+gets one model whether it is scored as one record field (unified) or as five
+sub-fields (native).
 """
 
 from __future__ import annotations
@@ -24,11 +32,14 @@ class ScheduleExtractor(MultiModelExtractor):
     def __init__(self, models, min_accuracy: float = 0.0):
         super().__init__(models)
         self.min_accuracy = min_accuracy
-        self._assignment: dict[str, str] = {}  # field -> model_key
+        self._assignment: dict[str, str] = {}  # extraction field -> model_key
 
     def fit(self, profiling_table: pd.DataFrame) -> None:
+        table = profiling_table.assign(
+            field=profiling_table["field"].map(lambda f: self.extraction_field_of.get(f, f))
+        )
         profile = (
-            profiling_table.groupby(["field", "model_key"])
+            table.groupby(["field", "model_key"])
             .agg(accuracy=("correct", "mean"), mean_wall_seconds=("wall_seconds", "mean"))
             .reset_index()
         )
@@ -43,7 +54,7 @@ class ScheduleExtractor(MultiModelExtractor):
     def extract(self, document_text: str, fields: list[str]) -> ExtractionResult:
         self._require_fitted()
         steps: list[ExtractionStep] = []
-        field_values: dict[str, list[str]] = {}
+        field_values: dict[str, list] = {}
         # Group fields by their assigned model so each model is called once.
         fields_by_model: dict[str, list[str]] = {}
         for f in fields:

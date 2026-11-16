@@ -13,6 +13,10 @@ dependencies = [
     # Used by bench_extract.datasets.matching (edit-distance matching, ported
     # from VRDU's official evaluator) -- core, not experiments-only.
     "rapidfuzz>=3.0",
+    # Used by bench_extract.scoring.unified (the opt-in cross-dataset accuracy
+    # measure): Hungarian list matching and date normalization.
+    "scipy>=1.11",
+    "python-dateutil>=2.8",
 ]
 
 [project.optional-dependencies]

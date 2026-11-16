@@ -14,9 +14,10 @@ from __future__ import annotations
 import contextlib
 import importlib
 import importlib.metadata
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, Optional
 
 from palimpzest import policy as pz_policy
+from pydantic import BaseModel
 from palimpzest.constants import Model
 from palimpzest.core.data.dataset import Dataset
 from palimpzest.core.data.iter_dataset import IterDataset
@@ -73,12 +74,20 @@ class DocumentDataset(IterDataset):
         return self._rows[idx]
 
 
-def as_str_list(value: Any) -> list[str]:
+def _as_value(v: Any) -> Any:
+    if isinstance(v, BaseModel):
+        v = v.model_dump()
+    return v if isinstance(v, dict) else str(v)
+
+
+def as_value_list(value: Any) -> list:
+    """A pz output cell as a list: strings for plain fields, dicts left as
+    dicts for record fields (e.g. VRDU `line_items` rows)."""
     if value is None:
         return []
     if isinstance(value, (list, tuple)):
-        return [str(v) for v in value if v is not None]
-    return [str(value)]
+        return [_as_value(v) for v in value if v is not None]
+    return [_as_value(value)]
 
 
 class ScoreFieldValidator(Validator):
@@ -89,28 +98,47 @@ class ScoreFieldValidator(Validator):
     pz falls back to an LLM judge (o4-mini, paid); `map_score_fn` being
     overridden is what prevents that.
 
+    Scoring goes through the run's *scored* fields (DatasetRunContext
+    .scored_fields / extraction_field_of / prediction_for), so pz optimizes
+    against exactly the measure the run reports. A scored field is scored when
+    the extraction field it is computed from is among the `fields` pz is
+    scoring; a cell the measure leaves unscored (score None: unified
+    both-empty) is skipped, and the record gets no score (None, which pz skips)
+    if nothing was scored.
+
     Custom validators subclass this (or pz's Validator) and are selected by
     `method_kwargs.abacus.validator` in the experiment config; the
-    constructor signature `(ground_truth, score_field)` is the contract."""
+    constructor signature `(ground_truth, score_field, extraction_field_of=None,
+    prediction_for=None)` is the contract."""
 
     def __init__(
         self,
-        ground_truth: dict[str, dict[str, list[str]]],
-        score_field: Callable[[list[str], list[str], str], bool],
+        ground_truth: dict[str, dict[str, Any]],  # document_id -> scored field -> ground truth
+        score_field: Callable[[Any, Any, str], Optional[float]],
+        extraction_field_of: Optional[dict[str, str]] = None,  # None => each field scored on its own
+        prediction_for: Optional[Callable[[dict[str, list], str], Any]] = None,
     ):
         super().__init__()
         self.ground_truth = ground_truth
         self.score_field = score_field
+        self.extraction_field_of = extraction_field_of
+        self.prediction_for = prediction_for or (lambda values, f: values.get(f, []))
 
     def map_score_fn(self, fields: list[str], input_record: dict, output: dict) -> float | None:
         truth = self.ground_truth.get(input_record[DOCUMENT_ID_COLUMN])
         if truth is None or not fields:
             return None
-        scores = [
-            float(self.score_field(as_str_list(output.get(f)), truth.get(f, []), f))
-            for f in fields
-        ]
-        return sum(scores) / len(scores)
+        source_of = self.extraction_field_of if self.extraction_field_of is not None else {f: f for f in fields}
+        available = set(fields)
+        values = {f: as_value_list(output.get(f)) for f in available}
+        scores = []
+        for scored_field, source in source_of.items():
+            if source not in available:
+                continue
+            score = self.score_field(self.prediction_for(values, scored_field), truth.get(scored_field, []), scored_field)
+            if score is not None:
+                scores.append(float(score))
+        return sum(scores) / len(scores) if scores else None
 
 
 VALIDATORS: dict[str, type[Validator]] = {"score_field": ScoreFieldValidator}

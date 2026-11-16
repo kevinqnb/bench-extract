@@ -34,9 +34,11 @@ experiment config):
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from bench_extract.datasets import cuad as cuad_loader, cuad_matching
 from bench_extract.datasets.base import DatasetRunContext
+from bench_extract.scoring.unified import NATIVE, ScoringConfig, unified_context_kwargs
 
 # field slug -> (CUAD category name, description). Authoritative for which
 # fields get extracted; load_run_context cross-checks the slug -> category map
@@ -97,6 +99,26 @@ EXCLUDED_YES_NO_FIELDS: dict[str, str] = {
 
 CATEGORY_BY_FIELD: dict[str, str] = {slug: category for slug, (category, _) in FIELDS.items()}
 
+# Unified measure (bench_extract.scoring.unified): each field's type. Keys must
+# equal FIELDS'. CUAD's ground truth is verbatim clause text, so a field is only
+# `date` when its spans are short date phrases ('7th day of September, 1999.');
+# effective_date / expiration_date spans are mostly clauses (median 5 / 31
+# tokens: 'The term of this Agreement shall be ten (10) years ...'), so they
+# are long_text. Each ground-truth span is its own entity (no repeated-mention
+# grouping as in VRDU).
+FIELD_TYPES: dict[str, str] = {
+    'document_name': 'short_text',
+    'parties': 'short_text',
+    'agreement_date': 'date',
+    'effective_date': 'long_text',
+    'expiration_date': 'long_text',
+    'renewal_term': 'long_text',
+    'notice_period_to_terminate_renewal': 'long_text',
+    'governing_law': 'long_text',
+    'competitive_restriction_exception': 'long_text',
+    'warranty_duration': 'long_text',
+}
+
 # CUAD's descriptions are yes/no review questions ("Is there a ..."), but the
 # ground truth is the verbatim clause text (e.g. '7th day of September, 1999.'),
 # not a yes/no or a normalized value -- so tell the model what to return.
@@ -125,8 +147,12 @@ normalized value). Use an empty list for a field the contract does not address. 
 Do not include any other keys."""
 
 
-def load_run_context(dataset_params: dict, data_root: Path = cuad_loader.DEFAULT_DATA_ROOT) -> DatasetRunContext:
-    """dataset_params: see the module docstring; only max_chars is read here."""
+def load_run_context(
+    dataset_params: dict, scoring: Optional[dict] = None, data_root: Path = cuad_loader.DEFAULT_DATA_ROOT
+) -> DatasetRunContext:
+    """dataset_params: see the module docstring; only max_chars is read here.
+    scoring: the experiment's params.scoring (None => native CUAD matching)."""
+    scoring_config = ScoringConfig.from_params(scoring)
     max_chars = dataset_params["max_chars"]
 
     # Drift guard, not the source (see FIELDS above).
@@ -142,16 +168,30 @@ def load_run_context(dataset_params: dict, data_root: Path = cuad_loader.DEFAULT
         )
 
     all_docs = {d.document_id: d for d in cuad_loader.load_documents(data_root=data_root)}
-
-    def score_field(predicted: list[str], ground_truth: list[str], field: str) -> bool:
-        return cuad_matching.score_prediction(predicted, ground_truth, CATEGORY_BY_FIELD[field])
-
-    return DatasetRunContext(
-        fields=sorted(FIELDS),
+    fields = sorted(FIELDS)
+    common = dict(
+        fields=fields,
         all_docs=all_docs,
         windowed_text=lambda doc: cuad_loader.windowed_text(doc, max_chars),
-        score_field=score_field,
         field_descriptions=dict(FIELD_DESCRIPTIONS),
+    )
+
+    if scoring_config.measure == NATIVE:
+
+        def score_field(predicted: list[str], ground_truth: list[str], field: str) -> float:
+            return float(cuad_matching.score_prediction(predicted, ground_truth, CATEGORY_BY_FIELD[field]))
+
+        return DatasetRunContext(score_field=score_field, **common)
+
+    return DatasetRunContext(
+        **common,
+        **unified_context_kwargs(
+            fields=fields,
+            field_types=FIELD_TYPES,
+            record_fields={},
+            config=scoring_config,
+            entity_ground_truth=lambda doc, field: [[span] for span in doc.fields.get(field, [])],
+        ),
     )
 
 

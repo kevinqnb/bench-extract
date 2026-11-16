@@ -101,3 +101,26 @@ def test_describe_and_training_split_params():
     out = cuad_dataset.training_split_params({**base, "train_sizes": [1, 2]})
     assert [p["train_size"] for p in out] == [1, 2]
     assert all("train_sizes" not in p for p in out)
+
+
+UNIFIED = {"measure": "unified", "match_threshold": 0.5, "quantity_decimals": 2}
+
+
+def test_field_types_cover_exactly_the_fields():
+    assert set(cuad_dataset.FIELD_TYPES) == set(cuad_dataset.FIELDS)
+
+
+def test_unified_context_scores_spans_as_entities():
+    ctx = cuad_dataset.load_run_context(PARAMS, scoring=UNIFIED, data_root=FIXTURE_ROOT)
+    assert ctx.scoring_measure == "unified" and ctx.scored_fields == ctx.fields
+    doc = ctx.all_docs["c0"]
+    gt = ctx.ground_truth(doc, "parties")
+    assert gt == [["Acme Corp."], ["Beta LLC"]]
+    # one of two parties found, exactly: P = 1, R = 1/2
+    assert abs(ctx.score_field(["ACME CORP"], gt, "parties") - 2 / 3) < 1e-9
+    # agreement_date is a date: a reformatted date is an exact match
+    assert ctx.score_field(["September 7, 1999"], ctx.ground_truth(doc, "agreement_date"), "agreement_date") == 1.0
+    # both empty -> not scored; native CUAD counted this as correct
+    assert ctx.score_field([], ctx.ground_truth(doc, "warranty_duration"), "warranty_duration") is None
+    native = cuad_dataset.load_run_context(PARAMS, data_root=FIXTURE_ROOT)
+    assert native.score_field([], [], "warranty_duration") == 1.0

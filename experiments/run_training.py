@@ -18,6 +18,7 @@ Expected params:
     model_keys: list[str]
     methods: list[str]
     limit: Optional[int]     -- cap documents per partition (debugging)
+    scoring: Optional[dict]  -- accuracy measure, as in run_benchmark.py (absent => native)
     method_kwargs: Optional[dict[str, dict]]  -- extra constructor kwargs per method
                                 name, e.g. {"schedule_baseline": {"min_accuracy": 0.5}}
 """
@@ -68,7 +69,7 @@ def run_training(
     dataset_params = params["dataset_params"]
     sweep_params = dataset_mod.training_split_params(dataset_params)
 
-    ctx = dataset_mod.load_run_context(dataset_params)
+    ctx = dataset_mod.load_run_context(dataset_params, scoring=params.get("scoring"))
     prompt_template = dataset_mod.EXTRACTION_PROMPT_TEMPLATE
     limit = limit_override if limit_override is not None else params.get("limit")
 
@@ -81,7 +82,7 @@ def run_training(
     manifest.started_at = datetime.now(timezone.utc).isoformat()
     manifest.host = socket.gethostname()
     manifest.job_id = os.environ.get("JOB_ID")  # set by SGE under qsub; None for an interactive run
-    manifest.extra = {"dataset": dataset, "dataset_params": dataset_params, "methods": params["methods"], "model_keys": params["model_keys"]}
+    manifest.extra = {"dataset": dataset, "dataset_params": dataset_params, "methods": params["methods"], "model_keys": params["model_keys"], "scoring": params.get("scoring") or {"measure": "native"}}
 
     print(f"[{config.id}] dataset={dataset} dataset_params={dataset_params} ({len(sweep_params)} sweep point(s))")
 
@@ -126,14 +127,14 @@ def run_training(
 
                 print(f"[{config.id}] {label}: profiling {len(models)} model(s) on {len(train_docs)} doc(s)...")
                 run_predictions, timing = _profile_models(models, train_docs, ctx.fields, ctx.windowed_text)
-                profiling_table = build_profiling_table(run_predictions, ctx.all_docs, ctx.fields, ctx.score_field, timing)
+                profiling_table = build_profiling_table(run_predictions, ctx, timing)
 
                 for method in params["methods"]:
                     spec = EXTRACTOR_REGISTRY[method]
                     extractor = spec.extractor_cls(list(models.values()), **method_kwargs.get(method, {}))
                     extractor.bind_run_context(ctx, train_docs)
                     extractor.fit(profiling_table)
-                    result_metrics = _evaluate_extractor(extractor, valid_docs, ctx.fields, ctx.score_field, ctx.windowed_text)
+                    result_metrics = _evaluate_extractor(extractor, valid_docs, ctx)
                     prefix = f"{method}__{label}"
                     for k, v in extractor.fit_metrics.items():
                         metrics[f"{prefix}_fit_{k}"] = v
